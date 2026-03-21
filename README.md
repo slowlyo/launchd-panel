@@ -8,7 +8,8 @@
 - Wails
 - React 18
 - [`antd`](frontend/package.json:13)
-- [`tailwindcss`](frontend/package.json:16)
+- [`simplebar-react`](frontend/package.json:16)
+- [`tailwindcss`](frontend/package.json:17)
 
 ## 开发
 
@@ -46,3 +47,4 @@ wails build
 - 全局样式入口：[`frontend/src/style.css`](frontend/src/style.css)
 - 通过 [`frontend/postcss.config.js`](frontend/postcss.config.js) 接入 Tailwind CSS v4
 - 保留 [`antd`](frontend/package.json:13) 组件体系，使用 Tailwind 工具类与组件层样式简化布局和视觉定制
+- 滚动区域统一通过 [`frontend/src/components/ScrollArea.jsx`](frontend/src/components/ScrollArea.jsx) 封装 [`simplebar-react`](frontend/package.json:16)

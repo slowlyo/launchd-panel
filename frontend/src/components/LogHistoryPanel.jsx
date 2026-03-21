@@ -10,7 +10,7 @@ function LogHistoryPanel() {
   return (
     <Card
       bordered={false}
-      className="surface-card"
+      className="surface-card logs-card"
       title="日志查看与运行历史"
       extra={<Segmented options={['stdout', 'stderr', '合并视图']} defaultValue="stderr" />}
     >

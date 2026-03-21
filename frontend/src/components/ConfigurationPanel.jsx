@@ -10,7 +10,7 @@ function ConfigurationPanel() {
   return (
     <Card
       bordered={false}
-      className="surface-card"
+      className="surface-card editor-card"
       title="创建 / 编辑配置"
       extra={<Segmented options={['表单模式', '原始 plist']} defaultValue="表单模式" />}
     >

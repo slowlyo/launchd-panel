@@ -29,7 +29,7 @@ function DetailPanel({ task }) {
     <Space direction="vertical" size={16} className="full-width">
       <Card
         bordered={false}
-        className="surface-card"
+        className="surface-card detail-card"
         title="任务详情"
         extra={<StatusTag status="failed" text="启动失败" detail="退出码 78" />}
       >
@@ -111,7 +111,7 @@ function DetailPanel({ task }) {
         </Space>
       </Card>
 
-      <Card bordered={false} className="surface-card" title="危险操作确认">
+      <Card bordered={false} className="surface-card danger-card" title="危险操作确认">
         <Descriptions column={1} size="small">
           <Descriptions.Item label="操作">卸载系统级任务</Descriptions.Item>
           <Descriptions.Item label="影响">备份服务将不再由 launchd 托管</Descriptions.Item>

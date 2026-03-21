@@ -11,15 +11,18 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// main 启动桌面应用并注册窗口配置。
 func main() {
-	// Create an instance of the app structure
+	// 创建应用实例，供窗口生命周期和前后端绑定使用。
 	app := NewApp()
 
-	// Create application with options
+	// 设置桌面应用窗口参数，限制最小尺寸以避免布局被过度压缩。
 	err := wails.Run(&options.App{
-		Title:  "launchd-panel",
-		Width:  1024,
-		Height: 768,
+		Title:     "launchd-panel",
+		Width:     1150,
+		Height:    768,
+		MinWidth:  1150,
+		MinHeight: 768,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -30,6 +33,7 @@ func main() {
 		},
 	})
 
+	// 启动失败时直接输出错误，便于本地排查初始化问题。
 	if err != nil {
 		println("Error:", err.Error())
 	}

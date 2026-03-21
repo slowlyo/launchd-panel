@@ -13,6 +13,7 @@
     "antd": "^6.3.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "simplebar-react": "^3.3.2",
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {

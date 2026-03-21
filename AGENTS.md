@@ -21,7 +21,8 @@
 - Vite
 - [`antd`](frontend/package.json:13)
 - [`@ant-design/icons`](frontend/package.json:12)
-- [`tailwindcss`](frontend/package.json:16)
+- [`simplebar-react`](frontend/package.json:16)
+- [`tailwindcss`](frontend/package.json:17)
 
 ## 目录说明
 
@@ -38,13 +39,13 @@ launchd-panel/
     ├── vite.config.js
     ├── src/
     │   ├── App.jsx
-    │   ├── App.css
     │   ├── style.css
     │   └── components/
     │       ├── ConfigurationPanel.jsx
     │       ├── DetailPanel.jsx
     │       ├── LogHistoryPanel.jsx
     │       ├── Navigation.jsx
+    │       ├── ScrollArea.jsx
     │       ├── StatusTag.jsx
     │       ├── SummarySection.jsx
     │       ├── TasksTable.jsx
@@ -60,7 +61,7 @@ launchd-panel/
 - antd 主题配置
 - 导航状态管理
 - 当前任务选择状态
-- 移动端抽屉交互
+- 侧边栏与内容区滚动容器编排
 
 ### 组件拆分
 界面按职责拆分为以下子组件：
@@ -70,6 +71,7 @@ launchd-panel/
 - [`ConfigurationPanel`](frontend/src/components/ConfigurationPanel.jsx:8)：配置编辑展示区
 - [`LogHistoryPanel`](frontend/src/components/LogHistoryPanel.jsx:8)：日志与执行历史
 - [`DetailPanel`](frontend/src/components/DetailPanel.jsx:15)：任务详情与风险信息
+- [`ScrollArea`](frontend/src/components/ScrollArea.jsx:15)：统一滚动区域封装
 - [`StatusTag`](frontend/src/components/StatusTag.jsx:21)：状态展示组件
 
 ### 数据组织
@@ -96,7 +98,7 @@ launchd-panel/
 ### 响应式策略
 - 大屏：左侧导航 + 中间内容 + 右侧详情
 - 中屏：详情区域下移
-- 小屏：侧边栏收起，通过 [`Drawer`](frontend/src/App.jsx:112) 打开导航
+- 小屏：侧边栏上移为顶部区块，主内容继续纵向排布
 - 表格保留横向滚动，不强行压缩字段语义
 
 ## 代码规范

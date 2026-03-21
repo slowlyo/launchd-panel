@@ -75,7 +75,7 @@ function TasksTable({ onSelectTask }) {
   return (
     <Card
       bordered={false}
-      className="surface-card"
+      className="surface-card table-card"
       title="任务列表"
       extra={
         <Space wrap>
