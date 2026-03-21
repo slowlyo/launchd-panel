@@ -16,6 +16,13 @@ function renderMenuCount(count) {
 }
 
 /**
+ * 渲染导航分组右侧元信息。
+ */
+function renderGroupMeta(total) {
+  return <Text className="menu-group-meta">{total} 项</Text>;
+}
+
+/**
  * 渲染侧边栏品牌区域。
  */
 export function SidebarBrand() {
@@ -34,7 +41,10 @@ function Navigation({ selectedKey, onSelect }) {
     <div className="nav-groups full-width">
       {navigationGroups.map((group) => (
         <div key={group.key} className="nav-group">
-          <Text className="menu-group-title">{group.title}</Text>
+          <div className="nav-group-header">
+            <Text className="menu-group-title">{group.title}</Text>
+            {renderGroupMeta(group.items.length)}
+          </div>
           <Menu
             className="nav-menu"
             mode="inline"
@@ -44,7 +54,7 @@ function Navigation({ selectedKey, onSelect }) {
               icon: item.icon,
               label: (
                 <Flex justify="space-between" align="center" className="menu-item-label">
-                  <span>{item.label}</span>
+                  <span className="menu-item-name">{item.label}</span>
                   {renderMenuCount(item.count)}
                 </Flex>
               ),

@@ -9,17 +9,26 @@ import {
   Timeline,
   Typography,
 } from 'antd';
-import { CodeOutlined, PlayCircleOutlined, SafetyCertificateOutlined, StopOutlined } from '@ant-design/icons';
+import {
+  CodeOutlined,
+  EyeOutlined,
+  PlayCircleOutlined,
+  SafetyCertificateOutlined,
+  StopOutlined,
+} from '@ant-design/icons';
 import { detailGroups, historyEvents, logLines } from './mockData.jsx';
 import StatusTag from './StatusTag';
 
 const { Title, Text } = Typography;
 
 /**
- * 渲染详情区内容。
+ * 渲染抽屉中的任务详情内容。
  */
-function DetailPanel({ task }) {
+function DetailPanel({ task, onShowConfig, onShowLogs }) {
   const currentTask = task || {
+    status: 'failed',
+    statusText: '启动失败',
+    statusDetail: '退出码 78',
     label: 'com.ops.backup.daily',
     scope: '系统 Daemon',
     result: '退出码 78 · 8 分钟前',
@@ -30,8 +39,15 @@ function DetailPanel({ task }) {
       <Card
         bordered={false}
         className="surface-card detail-card"
-        title="任务详情"
-        extra={<StatusTag status="failed" text="启动失败" detail="退出码 78" />}
+        extra={
+          <Space size={8} wrap>
+            <StatusTag
+              status={currentTask.status}
+              text={currentTask.statusText}
+              detail={currentTask.statusDetail}
+            />
+          </Space>
+        }
       >
         <Space direction="vertical" size={16} className="full-width">
           <div>
@@ -45,7 +61,12 @@ function DetailPanel({ task }) {
             <Button icon={<PlayCircleOutlined />}>启动</Button>
             <Button danger icon={<StopOutlined />}>停止</Button>
             <Button icon={<SafetyCertificateOutlined />}>校验</Button>
-            <Button type="primary" icon={<CodeOutlined />}>编辑</Button>
+            <Button icon={<EyeOutlined />} onClick={onShowLogs}>
+              查看日志
+            </Button>
+            <Button type="primary" icon={<CodeOutlined />} onClick={onShowConfig}>
+              编辑
+            </Button>
           </Space>
 
           <Alert

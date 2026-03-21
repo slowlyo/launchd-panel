@@ -1,4 +1,4 @@
-import { Alert, Card, Segmented, Timeline, Typography } from 'antd';
+import { Alert, Button, Card, Segmented, Timeline, Typography } from 'antd';
 import { historyEvents, logLines } from './mockData.jsx';
 
 const { Text } = Typography;
@@ -6,16 +6,31 @@ const { Text } = Typography;
 /**
  * 渲染日志与历史区。
  */
-function LogHistoryPanel() {
+function LogHistoryPanel({ task, onClose }) {
   return (
     <Card
       bordered={false}
       className="surface-card logs-card"
-      title="日志查看与运行历史"
-      extra={<Segmented options={['stdout', 'stderr', '合并视图']} defaultValue="stderr" />}
+      title={task ? `日志查看与运行历史 · ${task.label}` : '日志查看与运行历史'}
+      extra={
+        <div className="panel-extra-actions">
+          <Segmented options={['stdout', 'stderr', '合并视图']} defaultValue="stderr" />
+          <Button size="small" onClick={onClose}>
+            收起
+          </Button>
+        </div>
+      }
     >
       <div className="full-width app-section-stack">
-        <Alert type="warning" showIcon message="未授予完全磁盘访问权限时，部分日志可能不可读取。" />
+        <Alert
+          type="warning"
+          showIcon
+          message={
+            task
+              ? `${task.label} 的日志读取受权限影响，未授予完全磁盘访问时可能缺失。`
+              : '未授予完全磁盘访问权限时，部分日志可能不可读取。'
+          }
+        />
         <div className="log-viewer">
           {logLines.map((line) => (
             <div key={line} className={line.includes('[ERROR]') ? 'log-line is-error' : 'log-line'}>

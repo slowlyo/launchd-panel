@@ -1,7 +1,7 @@
-import { Typography } from 'antd';
+import { Tooltip, Typography } from 'antd';
 import { summaryCards } from './mockData.jsx';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 /**
  * 渲染概览统计区。
@@ -10,16 +10,18 @@ function SummarySection() {
   return (
     <div className="summary-strip">
       {summaryCards.map((card) => (
-        <div key={card.label} className="summary-strip-item">
-          <Text className="summary-strip-label">{card.label}</Text>
-          <div className="summary-strip-value">
-            {card.value}
-            <span>{card.suffix}</span>
+        <Tooltip key={card.label} title={card.note} placement="top">
+          <div className="summary-strip-item" tabIndex={0}>
+            <div className="summary-strip-value">
+              {card.value}
+              <span>{card.suffix}</span>
+            </div>
+            <span className="summary-strip-divider" />
+            <div className="summary-strip-meta">
+              <Text className="summary-strip-label">{card.label}</Text>
+            </div>
           </div>
-          <Paragraph type="secondary" className="summary-strip-note">
-            {card.note}
-          </Paragraph>
-        </div>
+        </Tooltip>
       ))}
     </div>
   );
