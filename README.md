@@ -1,19 +1,48 @@
-# README
+# launchd-panel
 
-## About
+基于 [`Wails`](wails.json) 与 React 的 macOS [`launchd`](main.go:1) 任务管理面板。
 
-This is the official Wails React template.
+## 技术栈
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+- Go
+- Wails
+- React 18
+- [`antd`](frontend/package.json:13)
+- [`tailwindcss`](frontend/package.json:16)
 
-## Live Development
+## 开发
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+前端开发目录：[`frontend/`](frontend)
 
-## Building
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
 
-To build a redistributable, production mode package, use `wails build`.
+桌面联调：
+
+```bash
+wails dev
+```
+
+## 构建
+
+前端构建：
+
+```bash
+cd frontend
+pnpm build
+```
+
+桌面应用构建：
+
+```bash
+wails build
+```
+
+## 样式方案
+
+- 全局样式入口：[`frontend/src/style.css`](frontend/src/style.css)
+- 通过 [`frontend/postcss.config.js`](frontend/postcss.config.js) 接入 Tailwind CSS v4
+- 保留 [`antd`](frontend/package.json:13) 组件体系，使用 Tailwind 工具类与组件层样式简化布局和视觉定制
