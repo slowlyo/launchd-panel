@@ -1,25 +1,27 @@
-import { Card, Col, Row, Statistic, Typography } from 'antd';
+import { Typography } from 'antd';
 import { summaryCards } from './mockData.jsx';
 
-const { Paragraph } = Typography;
+const { Paragraph, Text } = Typography;
 
 /**
  * 渲染概览统计区。
  */
 function SummarySection() {
   return (
-    <Row gutter={[16, 16]}>
+    <div className="summary-strip">
       {summaryCards.map((card) => (
-        <Col key={card.label} xs={24} sm={12} xl={6}>
-          <Card bordered={false} className="surface-card summary-card">
-            <Statistic title={card.label} value={card.value} suffix={card.suffix} />
-            <Paragraph type="secondary" className="summary-note">
-              {card.note}
-            </Paragraph>
-          </Card>
-        </Col>
+        <div key={card.label} className="summary-strip-item">
+          <Text className="summary-strip-label">{card.label}</Text>
+          <div className="summary-strip-value">
+            {card.value}
+            <span>{card.suffix}</span>
+          </div>
+          <Paragraph type="secondary" className="summary-strip-note">
+            {card.note}
+          </Paragraph>
+        </div>
       ))}
-    </Row>
+    </div>
   );
 }
 

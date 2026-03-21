@@ -102,12 +102,12 @@ function App() {
           <Content className="app-content">
             <ScrollArea className="app-content-scroll" contentClassName="app-content-scroll-body">
               <Space direction="vertical" size={16} className="full-width">
-                <Card bordered={false} className="surface-card hero-card">
-                  <Flex justify="space-between" align="flex-start" gap={16} wrap className="hero-card-head">
-                    <div className="hero-copy">
-                      <Title level={3}>任务视图 · 全部任务</Title>
+                <Card bordered={false} className="surface-card workspace-overview-card">
+                  <Flex justify="space-between" align="flex-start" gap={16} wrap className="workspace-overview-head">
+                    <div className="workspace-overview-copy">
+                      <Title level={4}>任务视图 · 全部任务</Title>
                       <Paragraph type="secondary">
-                        聚合显示配置存在、已加载、运行中、失败、权限与日志状态。
+                        首屏优先显示任务列表，统计信息压缩为概览，减少对主工作区的占用。
                       </Paragraph>
                     </div>
                     <Space wrap className="hero-tags">
@@ -115,22 +115,26 @@ function App() {
                       <Tag>未授予完全磁盘访问时，日志可能不可用</Tag>
                     </Space>
                   </Flex>
+                  <SummarySection />
                 </Card>
 
-                <SummarySection />
-
-                <Row gutter={[16, 16]}>
-                  <Col xs={24} xl={16}>
-                    <Space direction="vertical" size={16} className="full-width">
-                      <TasksTable onSelectTask={setSelectedTask} />
-                      <ConfigurationPanel />
-                      <LogHistoryPanel />
-                    </Space>
+                <Row gutter={[16, 16]} align="start">
+                  <Col xs={24} xl={17}>
+                    <TasksTable onSelectTask={setSelectedTask} />
                   </Col>
-                  <Col xs={24} xl={8}>
+                  <Col xs={24} xl={7}>
                     <div className="desktop-detail-panel">
                       <DetailPanel task={selectedTask} />
                     </div>
+                  </Col>
+                </Row>
+
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} xl={14}>
+                    <ConfigurationPanel />
+                  </Col>
+                  <Col xs={24} xl={10}>
+                    <LogHistoryPanel />
                   </Col>
                 </Row>
               </Space>

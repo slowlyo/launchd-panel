@@ -62,11 +62,13 @@ launchd-panel/
 - 导航状态管理
 - 当前任务选择状态
 - 侧边栏与内容区滚动容器编排
+- 首屏按“紧凑概览 + 任务列表 + 详情”组织主工作区
+- 配置编辑与日志历史位于主内容区后段，避免挤压任务列表
 
 ### 组件拆分
 界面按职责拆分为以下子组件：
 - [`Navigation`](frontend/src/components/Navigation.jsx:8)：侧边导航
-- [`SummarySection`](frontend/src/components/SummarySection.jsx:7)：顶部统计卡片
+- [`SummarySection`](frontend/src/components/SummarySection.jsx:7)：顶部紧凑统计概览
 - [`TasksTable`](frontend/src/components/TasksTable.jsx:9)：任务列表表格
 - [`ConfigurationPanel`](frontend/src/components/ConfigurationPanel.jsx:8)：配置编辑展示区
 - [`LogHistoryPanel`](frontend/src/components/LogHistoryPanel.jsx:8)：日志与执行历史

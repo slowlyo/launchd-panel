@@ -48,3 +48,8 @@ wails build
 - 通过 [`frontend/postcss.config.js`](frontend/postcss.config.js) 接入 Tailwind CSS v4
 - 保留 [`antd`](frontend/package.json:13) 组件体系，使用 Tailwind 工具类与组件层样式简化布局和视觉定制
 - 滚动区域统一通过 [`frontend/src/components/ScrollArea.jsx`](frontend/src/components/ScrollArea.jsx) 封装 [`simplebar-react`](frontend/package.json:16)
+
+## 界面布局
+
+- 首屏采用“紧凑概览 + 任务列表 + 详情”结构，任务列表作为主工作区优先展示
+- 配置编辑与日志历史下沉到主内容区后段，减少对任务浏览与筛选的干扰
