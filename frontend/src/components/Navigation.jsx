@@ -1,4 +1,5 @@
 import { Flex, Menu, Tag, Typography } from 'antd';
+import logoImage from '../assets/images/logo-universal.png';
 
 const { Text, Title } = Typography;
 
@@ -27,7 +28,10 @@ function renderGroupMeta(total) {
 export function SidebarBrand() {
   return (
     <div className="brand-header">
-      <Title level={4} className="brand-title">Launchd Panel</Title>
+      <div className="brand-identity">
+        <img src={logoImage} alt="Launchd Panel" className="brand-logo" />
+        <Title level={4} className="brand-title">Launchd Panel</Title>
+      </div>
     </div>
   );
 }

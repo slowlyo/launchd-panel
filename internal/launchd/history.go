@@ -108,14 +108,16 @@ func (h *HistoryStore) CountMap() (map[string]int, error) {
 
 // NewEntry 构造一条标准历史记录。
 func (h *HistoryStore) NewEntry(serviceID string, label string, action string, success bool, message string) HistoryEntry {
+	now := time.Now()
+
 	return HistoryEntry{
-		ID:        time.Now().Format("20060102150405.000000000"),
+		ID:        now.Format("20060102150405.000000000"),
 		ServiceID: serviceID,
 		Label:     label,
 		Action:    action,
 		Success:   success,
 		Message:   message,
-		CreatedAt: time.Now(),
+		CreatedAt: now.Format(time.RFC3339Nano),
 	}
 }
 

@@ -1,7 +1,5 @@
 package launchd
 
-import "time"
-
 const (
 	// ScopeUserAgent 表示当前用户可写的 LaunchAgent。
 	ScopeUserAgent = "user-agent"
@@ -274,11 +272,11 @@ type BatchActionResult struct {
 
 // HistoryEntry 表示应用内动作历史。
 type HistoryEntry struct {
-	ID        string    `json:"id"`
-	ServiceID string    `json:"serviceId"`
-	Label     string    `json:"label"`
-	Action    string    `json:"action"`
-	Success   bool      `json:"success"`
-	Message   string    `json:"message"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID        string `json:"id"`
+	ServiceID string `json:"serviceId"`
+	Label     string `json:"label"`
+	Action    string `json:"action"`
+	Success   bool   `json:"success"`
+	Message   string `json:"message"`
+	CreatedAt string `json:"createdAt"`
 }

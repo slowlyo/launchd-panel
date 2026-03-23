@@ -1,5 +1,9 @@
 # launchd-panel
 
+<p align="center">
+  <img src="./build/appicon.png" alt="launchd-panel logo" width="160" />
+</p>
+
 基于 Wails、Go 和 React 的 macOS `launchd` 任务与 plist 可视化管理工具。
 
 [English](./README.md)

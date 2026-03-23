@@ -1,5 +1,9 @@
 # launchd-panel
 
+<p align="center">
+  <img src="./build/appicon.png" alt="launchd-panel logo" width="160" />
+</p>
+
 A macOS desktop app for inspecting and managing `launchd` jobs and plist files, built with Wails, Go, and React.
 
 [简体中文](./README.zh-CN.md)
