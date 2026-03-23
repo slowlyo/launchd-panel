@@ -25,17 +25,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: 安装 pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: 安装 Wails CLI
         shell: bash
