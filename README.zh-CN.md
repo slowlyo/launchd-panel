@@ -10,11 +10,11 @@
 
 ## 安装
 
-前往 [GitHub Releases](https://github.com/slowlyo/launchd-panel/releases) 下载最新的 `darwin_universal.zip`，解压后将 `launchd-panel.app` 放到“应用程序”目录即可。
+前往 [GitHub Releases](https://github.com/slowlyo/launchd-panel/releases) 下载最新的 `darwin_universal.zip`，解压后将 `Launchd Panel.app` 放到“应用程序”目录即可。
 
 当前版本未做 Apple 签名与公证，首次打开如果被 macOS 拦截：
 
-- 在 Finder 中右键 `launchd-panel.app`，选择“打开”
+- 在 Finder 中右键 `Launchd Panel.app`，选择“打开”
 - 或前往“系统设置 → 隐私与安全性”，允许该应用继续打开
 
 ## 项目简介
@@ -236,7 +236,7 @@ wails build
 流水线会完成以下动作：
 
 - 执行 `wails build -clean -platform darwin/universal`
-- 将 `build/bin/launchd-panel.app` 打包为 zip
+- 将 `build/bin/launchd-panel.app` 重命名为 `Launchd Panel.app` 后打包为 zip
 - 自动创建 GitHub Release，并上传 zip 与 SHA-256 校验文件
 
 ## 说明

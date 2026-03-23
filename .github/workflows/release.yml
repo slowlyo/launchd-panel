@@ -9,7 +9,9 @@ permissions:
   contents: write
 
 env:
-  APP_NAME: launchd-panel
+  APP_ARCHIVE_PREFIX: launchd-panel
+  APP_BUILD_BUNDLE_NAME: launchd-panel
+  APP_RELEASE_BUNDLE_NAME: Launchd Panel
 
 jobs:
   build-and-release:
@@ -50,9 +52,11 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE_NAME="${APP_NAME}_${VERSION}_darwin_universal.zip"
+          ARCHIVE_NAME="${APP_ARCHIVE_PREFIX}_${VERSION}_darwin_universal.zip"
+          STAGED_APP="release/${APP_RELEASE_BUNDLE_NAME}.app"
           mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent "build/bin/${APP_NAME}.app" "release/${ARCHIVE_NAME}"
+          ditto "build/bin/${APP_BUILD_BUNDLE_NAME}.app" "${STAGED_APP}"
+          ditto -c -k --sequesterRsrc --keepParent "${STAGED_APP}" "release/${ARCHIVE_NAME}"
           shasum -a 256 "release/${ARCHIVE_NAME}" > "release/${ARCHIVE_NAME}.sha256"
 
       - name: 发布 GitHub Release

@@ -10,11 +10,11 @@ A macOS desktop app for inspecting and managing `launchd` jobs and plist files, 
 
 ## Install
 
-Download the latest `darwin_universal.zip` from [GitHub Releases](https://github.com/slowlyo/launchd-panel/releases), extract it, and move `launchd-panel.app` into your Applications folder.
+Download the latest `darwin_universal.zip` from [GitHub Releases](https://github.com/slowlyo/launchd-panel/releases), extract it, and move `Launchd Panel.app` into your Applications folder.
 
 The current build is not Apple-signed or notarized yet. If macOS blocks the first launch:
 
-- right-click `launchd-panel.app` in Finder and choose `Open`
+- right-click `Launchd Panel.app` in Finder and choose `Open`
 - or allow it from `System Settings -> Privacy & Security`
 
 ## Overview
@@ -236,7 +236,7 @@ Push any tag, for example `v0.1.0`, to trigger GitHub Actions.
 The workflow will:
 
 - build the macOS app with `wails build -clean -platform darwin/universal`
-- package `build/bin/launchd-panel.app` into a zip archive
+- repackage `build/bin/launchd-panel.app` as `Launchd Panel.app` inside the zip archive
 - publish a GitHub Release and upload the zip plus SHA-256 checksum
 
 ## Notes

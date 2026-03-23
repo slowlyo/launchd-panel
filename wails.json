@@ -1,7 +1,10 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "launchd-panel",
-  "outputfilename": "launchd-panel",
+  "outputfilename": "Launchd Panel",
+  "info": {
+    "productName": "Launchd Panel"
+  },
   "frontend:install": "pnpm install",
   "frontend:build": "pnpm run build",
   "frontend:dev:watcher": "pnpm run dev",

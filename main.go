@@ -20,7 +20,7 @@ func main() {
 
 	// 设置桌面应用窗口参数，限制最小尺寸以避免布局被过度压缩。
 	err := wails.Run(&options.App{
-		Title:     "launchd-panel",
+		Title:     "Launchd Panel",
 		Width:     1100,
 		Height:    768,
 		MinWidth:  1000,
