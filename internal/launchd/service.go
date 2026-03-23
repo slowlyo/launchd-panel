@@ -23,6 +23,7 @@ const snapshotTTL = 30 * time.Second
 var (
 	servicesLinePattern = regexp.MustCompile(`^\s*(\d+)\s+(-?\d+|-)\s+(.+)$`)
 	disabledLinePattern = regexp.MustCompile(`^\s*"([^"]+)"\s+=>\s+(enabled|disabled)$`)
+	logFileStemPattern  = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 )
 
 // commandRunner 抽象命令执行，便于测试替换。
@@ -172,12 +173,7 @@ func (s *Service) GetServiceDetail(ctx context.Context, id string) (ServiceDetai
 func (s *Service) GetServiceEditor(ctx context.Context, id string) (ServiceEditorState, error) {
 	// 新建配置不依赖现有快照，直接返回模板，避免空弹窗触发全量扫描。
 	if strings.TrimSpace(id) == "" {
-		form := ServiceFormData{
-			FileName:             "com.example.new-task.plist",
-			EnvironmentVariables: map[string]string{},
-			ProgramArguments:     []string{},
-			WatchPaths:           []string{},
-		}
+		form := s.newServiceFormData()
 
 		rawXML, err := encodeXML(map[string]interface{}{})
 		if err != nil {
@@ -291,6 +287,10 @@ func (s *Service) SaveServiceConfig(ctx context.Context, req SaveServiceConfigRe
 		}, errors.New("配置校验未通过")
 	}
 
+	if err := prepareLogTargets(candidate.rawMap); err != nil {
+		return SaveServiceConfigResponse{}, err
+	}
+
 	oldPath := ""
 	oldDisabled := false
 	if base != nil {
@@ -318,7 +318,7 @@ func (s *Service) SaveServiceConfig(ctx context.Context, req SaveServiceConfigRe
 		if _, err := s.runLaunchctl(ctx, "bootstrap", s.gui, candidate.targetPath); err != nil {
 			return SaveServiceConfigResponse{
 				Validation: candidate.validation,
-			}, err
+			}, fmt.Errorf("加载任务失败：%w", err)
 		}
 
 		// 原任务本来处于停用态时，重载后继续维持停用语义。
@@ -586,7 +586,8 @@ func (s *Service) executeStart(ctx context.Context, record *serviceRecord) (bool
 		}
 
 		if _, err := s.runLaunchctl(ctx, "bootstrap", s.gui, record.path); err != nil {
-			return false, "加载任务失败", err
+			message := buildActionErrorMessage("加载任务失败", err)
+			return false, message, errors.New(message)
 		}
 	}
 
@@ -603,7 +604,8 @@ func (s *Service) executeReload(ctx context.Context, record *serviceRecord) (boo
 	_, _ = s.runLaunchctl(ctx, "bootout", s.gui, record.path)
 
 	if _, err := s.runLaunchctl(ctx, "bootstrap", s.gui, record.path); err != nil {
-		return false, "重载失败", err
+		message := buildActionErrorMessage("重载失败", err)
+		return false, message, errors.New(message)
 	}
 
 	if record.disabled {
@@ -622,10 +624,33 @@ func (s *Service) executeDelete(ctx context.Context, record *serviceRecord) (boo
 
 	_, _ = s.runLaunchctl(ctx, "bootout", s.gui, record.path)
 	if err := os.Remove(record.path); err != nil && !os.IsNotExist(err) {
-		return false, "删除文件失败", err
+		message := buildActionErrorMessage("删除文件失败", err)
+		return false, message, errors.New(message)
 	}
 
 	return true, "任务已删除", nil
+}
+
+// buildActionErrorMessage 构造可直接展示给用户的失败原因。
+func buildActionErrorMessage(prefix string, err error) string {
+	text := strings.TrimSpace(prefix)
+
+	// 没有底层错误时直接返回已有文案。
+	if err == nil {
+		return text
+	}
+
+	detail := strings.TrimSpace(err.Error())
+	if detail == "" {
+		return text
+	}
+
+	// 已经带有前缀时直接复用，避免重复拼接。
+	if text == "" || strings.Contains(detail, text) {
+		return detail
+	}
+
+	return fmt.Sprintf("%s：%s", text, detail)
 }
 
 // buildCandidateConfig 构造待校验或待保存的候选配置。
@@ -1253,8 +1278,18 @@ func validateCandidateMap(ctx context.Context, runner commandRunner, rawMap map[
 
 		dir := filepath.Dir(field.value)
 		info, statErr := os.Stat(dir)
-		if statErr != nil || !info.IsDir() {
-			issues = append(issues, ValidationIssue{Level: "warning", Field: field.key, Message: "日志目录不存在"})
+		if statErr != nil {
+			// 可自动创建的目录不再提示，避免新建任务时出现误报。
+			if canPrepareDir(dir) {
+				continue
+			}
+			issues = append(issues, ValidationIssue{Level: "warning", Field: field.key, Message: "日志目录不存在，且当前无法自动创建"})
+			continue
+		}
+
+		// 目录路径如果落到文件上，直接提示用户修正。
+		if !info.IsDir() {
+			issues = append(issues, ValidationIssue{Level: "warning", Field: field.key, Message: "日志目录路径无效"})
 			continue
 		}
 
@@ -1631,6 +1666,47 @@ func writeAtomicFile(path string, data []byte, mode os.FileMode) error {
 	return os.Rename(tempPath, path)
 }
 
+// prepareLogTargets 提前准备日志目录和文件，避免任务首次运行时找不到目标路径。
+func prepareLogTargets(rawMap map[string]interface{}) error {
+	handled := map[string]struct{}{}
+
+	for _, path := range compactStrings([]string{
+		readString(rawMap["StandardOutPath"]),
+		readString(rawMap["StandardErrorPath"]),
+	}) {
+		if _, exists := handled[path]; exists {
+			continue
+		}
+		handled[path] = struct{}{}
+
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("准备日志目录失败: %w", err)
+		}
+
+		info, err := os.Stat(path)
+		if err == nil {
+			// 目标已存在时直接复用，避免误改用户已有日志文件。
+			if info.IsDir() {
+				return fmt.Errorf("日志路径不能指向目录: %s", path)
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("检查日志文件失败: %w", err)
+		}
+
+		file, openErr := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+		if openErr != nil {
+			return fmt.Errorf("创建日志文件失败: %w", openErr)
+		}
+		if closeErr := file.Close(); closeErr != nil {
+			return fmt.Errorf("关闭日志文件失败: %w", closeErr)
+		}
+	}
+
+	return nil
+}
+
 // findRecord 返回指定路径对应的内部记录。
 func findRecord(records map[string]*serviceRecord, id string) (*serviceRecord, error) {
 	record, ok := records[id]
@@ -1704,6 +1780,41 @@ func sanitizeFileName(name string) (string, error) {
 	}
 
 	return name, nil
+}
+
+// newServiceFormData 返回新建任务的默认表单数据。
+func (s *Service) newServiceFormData() ServiceFormData {
+	fileName := "com.example.new-task.plist"
+	stdoutPath, stderrPath := s.defaultLogPaths("", fileName)
+
+	return ServiceFormData{
+		FileName:             fileName,
+		StandardOutPath:      stdoutPath,
+		StandardErrorPath:    stderrPath,
+		EnvironmentVariables: map[string]string{},
+		ProgramArguments:     []string{},
+		WatchPaths:           []string{},
+	}
+}
+
+// defaultLogPaths 生成默认日志文件路径。
+func (s *Service) defaultLogPaths(label string, fileName string) (string, string) {
+	stem := buildLogFileStem(firstNonEmpty(label, fileName))
+	logDir := filepath.Join(s.homeDir, "Library", "Logs", "launchd-panel")
+
+	return filepath.Join(logDir, stem+".stdout.log"), filepath.Join(logDir, stem+".stderr.log")
+}
+
+// buildLogFileStem 将任务文件名转换为日志文件名片段。
+func buildLogFileStem(fileName string) string {
+	stem := strings.TrimSpace(filepath.Base(fileName))
+	stem = strings.TrimSuffix(stem, ".plist")
+	stem = strings.TrimSpace(logFileStemPattern.ReplaceAllString(stem, "-"))
+	stem = strings.Trim(stem, "-._")
+	if stem == "" {
+		return "task"
+	}
+	return stem
 }
 
 // cloneMap 深拷贝 map[string]interface{}。
@@ -1879,6 +1990,32 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// canPrepareDir 判断目录是否可由当前用户自动创建。
+func canPrepareDir(path string) bool {
+	current := strings.TrimSpace(path)
+	if current == "" {
+		return false
+	}
+
+	for {
+		info, err := os.Stat(current)
+		if err == nil {
+			return info.IsDir() && info.Mode().Perm()&0o200 != 0
+		}
+
+		// 只允许沿着不存在的目录向上探测，其他错误直接视为不可准备。
+		if !os.IsNotExist(err) {
+			return false
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return false
+		}
+		current = parent
+	}
 }
 
 // formatTime 格式化时间。

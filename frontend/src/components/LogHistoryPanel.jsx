@@ -1,6 +1,7 @@
 import { Alert, Button, Card, Empty, Segmented, Spin, Timeline, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { ListServiceHistory, ReadServiceLogs } from '../../wailsjs/go/main/App';
+import { getErrorMessage } from '../utils/errors';
 
 const { Text } = Typography;
 
@@ -43,7 +44,7 @@ function LogHistoryPanel({ task, onClose }) {
         setHistory(historyResponse);
       } catch (error) {
         if (!cancelled) {
-          message.error(error?.message || '读取日志失败');
+          message.error(getErrorMessage(error, '读取日志失败'));
         }
       } finally {
         if (!cancelled) {

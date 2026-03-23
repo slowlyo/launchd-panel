@@ -26,6 +26,7 @@ import {
 import { useEffect, useState } from 'react';
 import { ExecuteServiceAction, GetServiceDetail, ListServiceHistory } from '../../wailsjs/go/main/App';
 import StatusTag from './StatusTag';
+import { getErrorMessage } from '../utils/errors';
 
 const { Title, Text } = Typography;
 
@@ -83,7 +84,7 @@ function DetailPanel({ taskId, taskSummary, onShowConfig, onShowLogs, onWorkspac
         setHistory(historyResponse);
       } catch (error) {
         if (!cancelled) {
-          message.error(error?.message || '加载任务详情失败');
+          message.error(getErrorMessage(error, '加载任务详情失败'));
         }
       } finally {
         if (!cancelled) {
@@ -125,7 +126,7 @@ function DetailPanel({ taskId, taskSummary, onShowConfig, onShowLogs, onWorkspac
       const historyResponse = await ListServiceHistory(taskId);
       setHistory(historyResponse);
     } catch (error) {
-      message.error(error?.message || '操作失败');
+      message.error(getErrorMessage(error, '操作失败'));
     } finally {
       setActionLoading('');
     }

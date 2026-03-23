@@ -36,7 +36,13 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { BatchExecute, GetThemeMode, GetWorkspaceSnapshot, SaveThemeMode } from '../wailsjs/go/main/App';
+import {
+  BatchExecute,
+  ExecuteServiceAction,
+  GetThemeMode,
+  GetWorkspaceSnapshot,
+  SaveThemeMode,
+} from '../wailsjs/go/main/App';
 import ConfigurationPanel from './components/ConfigurationPanel';
 import DetailPanel from './components/DetailPanel';
 import LogHistoryPanel from './components/LogHistoryPanel';
@@ -45,10 +51,13 @@ import SettingsPanel from './components/SettingsPanel';
 import ScrollArea from './components/ScrollArea';
 import SummarySection from './components/SummarySection';
 import TasksTable from './components/TasksTable';
+import { buildTaskMenuItems } from './utils/taskMenus';
+import { getErrorMessage } from './utils/errors';
 
 const { Header, Sider, Content } = Layout;
-const CONTEXT_MENU_WIDTH = 152;
+const CONTEXT_MENU_WIDTH = 188;
 const CONTEXT_MENU_OFFSET = 12;
+const CONTEXT_MENU_HEIGHT = 288;
 const APP_SETTINGS_STORAGE_KEY = 'launchd-panel:app-settings';
 const THEME_MODE_OPTIONS = new Set(['light', 'dark', 'system']);
 const DEFAULT_APP_SETTINGS = {
@@ -59,9 +68,18 @@ const SYSTEM_SCOPE_KEYS = new Set(['all-agent', 'system-agent', 'daemon']);
 const TASK_STATUS_PRIORITY = {
   invalid: 0,
   failed: 1,
-  running: 2,
-  loaded: 3,
-  idle: 4,
+  warning: 2,
+  running: 3,
+  loaded: 4,
+  idle: 5,
+  disabled: 6,
+};
+const TASK_SCOPE_PRIORITY = {
+  'user-agent': 0,
+  unknown: 1,
+  'all-agent': 2,
+  'system-agent': 3,
+  daemon: 4,
 };
 
 /**
@@ -347,7 +365,19 @@ function getTaskSortWeight(task) {
     return TASK_STATUS_PRIORITY.invalid;
   }
 
+  // 停用任务默认不参与调度，排在可运行任务之后更利于巡检。
+  if (task.disabled) {
+    return TASK_STATUS_PRIORITY.disabled;
+  }
+
   return TASK_STATUS_PRIORITY[task.status] ?? TASK_STATUS_PRIORITY.idle;
+}
+
+/**
+ * 返回任务作用域排序权重，顺序与导航分组保持一致。
+ */
+function getTaskScopeWeight(task) {
+  return TASK_SCOPE_PRIORITY[task.scopeKey] ?? TASK_SCOPE_PRIORITY.unknown;
 }
 
 /**
@@ -362,9 +392,14 @@ function sortTasks(tasks) {
       return weightDelta;
     }
 
-    const scopeDelta = left.scope.localeCompare(right.scope, 'zh-CN');
+    const scopeDelta = getTaskScopeWeight(left) - getTaskScopeWeight(right);
     if (scopeDelta !== 0) {
       return scopeDelta;
+    }
+
+    // 同状态同作用域下，优先把可直接操作的任务放前面。
+    if (left.readOnly !== right.readOnly) {
+      return Number(left.readOnly) - Number(right.readOnly);
     }
 
     const labelDelta = left.label.localeCompare(right.label, 'zh-CN');
@@ -412,7 +447,12 @@ function matchNavigation(task, key) {
 /**
  * 返回最近刷新时间文案。
  */
-function buildRefreshLabel(refreshedAt) {
+function buildRefreshLabel(refreshedAt, isRefreshing = false) {
+  // 手动刷新进行中时，优先反馈当前动作状态。
+  if (isRefreshing) {
+    return '正在刷新任务列表';
+  }
+
   if (!refreshedAt) {
     return '尚未刷新';
   }
@@ -426,6 +466,7 @@ function buildRefreshLabel(refreshedAt) {
 function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [appSettings, setAppSettings] = useState(() => readAppSettings());
   const [systemThemeMode, setSystemThemeMode] = useState(() => getSystemThemeMode());
   const [isThemeModeHydrated, setIsThemeModeHydrated] = useState(false);
@@ -449,9 +490,13 @@ function App() {
   /**
    * 拉取工作区快照。
    */
-  const loadWorkspace = useCallback(async (showLoading = true) => {
+  const loadWorkspace = useCallback(async ({ showLoading = true, withRefreshFeedback = false } = {}) => {
+    // 首屏和显式刷新走不同反馈，避免重复提示。
     if (showLoading) {
       setLoading(true);
+    }
+    if (withRefreshFeedback) {
+      setIsRefreshing(true);
     }
 
     try {
@@ -470,14 +515,24 @@ function App() {
       });
 
       setSelectedRowKeys((current) => current.filter((id) => response.tasks.some((task) => task.id === id)));
+
+      // 仅手动刷新时提示成功，数量口径要与当前可见设置保持一致。
+      if (withRefreshFeedback) {
+        const visibleTaskCount = filterVisibleTasks(response.tasks, appSettings).length;
+        message.success(`刷新完成，当前共 ${visibleTaskCount} 项任务`);
+      }
     } catch (error) {
-      message.error(error?.message || '加载任务列表失败');
+      message.error(getErrorMessage(error, '加载任务列表失败'));
     } finally {
+      // 手动刷新结束后恢复按钮可用状态。
+      if (withRefreshFeedback) {
+        setIsRefreshing(false);
+      }
       if (showLoading) {
         setLoading(false);
       }
     }
-  }, []);
+  }, [appSettings]);
 
   /**
    * 关闭右键菜单，避免悬浮残留。
@@ -493,6 +548,18 @@ function App() {
   useEffect(() => {
     loadWorkspace();
   }, [loadWorkspace]);
+
+  /**
+   * 触发工具栏手动刷新。
+   */
+  const handleRefreshWorkspace = useCallback(() => {
+    // 正在刷新时直接忽略重复点击，避免并发请求。
+    if (isRefreshing) {
+      return;
+    }
+
+    loadWorkspace({ showLoading: false, withRefreshFeedback: true });
+  }, [isRefreshing, loadWorkspace]);
 
   useEffect(() => {
     let cancelled = false;
@@ -621,7 +688,7 @@ function App() {
    */
   const getContextMenuPosition = useCallback((event) => {
     const maxX = Math.max(CONTEXT_MENU_OFFSET, window.innerWidth - CONTEXT_MENU_WIDTH - CONTEXT_MENU_OFFSET);
-    const maxY = Math.max(CONTEXT_MENU_OFFSET, window.innerHeight - 220);
+    const maxY = Math.max(CONTEXT_MENU_OFFSET, window.innerHeight - CONTEXT_MENU_HEIGHT);
 
     return {
       x: Math.min(event.clientX, maxX),
@@ -711,6 +778,41 @@ function App() {
   }, [getContextMenuPosition]);
 
   /**
+   * 同步工作区快照并修正当前选中任务。
+   */
+  const handleWorkspaceChange = useCallback((nextSnapshot, nextTaskId = selectedTaskId) => {
+    setSnapshot(nextSnapshot);
+    setSelectedTaskId(nextTaskId);
+    setSelectedRowKeys((current) => current.filter((id) => nextSnapshot.tasks.some((task) => task.id === id)));
+  }, [selectedTaskId]);
+
+  /**
+   * 执行列表菜单中的单任务动作。
+   */
+  const handleExecuteTaskAction = useCallback(async (task, action) => {
+    if (!task || !action) {
+      return;
+    }
+
+    closeContextMenu();
+
+    try {
+      const response = await ExecuteServiceAction({ id: task.id, action });
+      handleWorkspaceChange(response.snapshot, response.detail?.id || task.id);
+
+      // 校验发现问题属于预期结果，使用警告反馈更准确。
+      if (action === 'validate' && !response.success) {
+        message.warning(response.message || '配置存在问题');
+        return;
+      }
+
+      message.success(response.message || '操作完成');
+    } catch (error) {
+      message.error(getErrorMessage(error, '执行任务操作失败'));
+    }
+  }, [closeContextMenu, handleWorkspaceChange]);
+
+  /**
    * 响应右键菜单操作。
    */
   const handleContextMenuAction = useCallback((action) => {
@@ -724,17 +826,13 @@ function App() {
       return;
     }
 
-    handleOpenLogs(contextMenu.task);
-  }, [contextMenu.task, handleOpenDetail, handleOpenEditConfig, handleOpenLogs]);
+    if (action === 'logs') {
+      handleOpenLogs(contextMenu.task);
+      return;
+    }
 
-  /**
-   * 同步工作区快照并修正当前选中任务。
-   */
-  const handleWorkspaceChange = useCallback((nextSnapshot, nextTaskId = selectedTaskId) => {
-    setSnapshot(nextSnapshot);
-    setSelectedTaskId(nextTaskId);
-    setSelectedRowKeys((current) => current.filter((id) => nextSnapshot.tasks.some((task) => task.id === id)));
-  }, [selectedTaskId]);
+    handleExecuteTaskAction(contextMenu.task, action);
+  }, [contextMenu.task, handleExecuteTaskAction, handleOpenDetail, handleOpenEditConfig, handleOpenLogs]);
 
   /**
    * 执行批量校验。
@@ -746,7 +844,7 @@ function App() {
       const failedCount = response.results.filter((item) => !item.success).length;
       message.success(failedCount === 0 ? '批量校验通过' : `批量校验完成，${failedCount} 项存在问题`);
     } catch (error) {
-      message.error(error?.message || '批量校验失败');
+      message.error(getErrorMessage(error, '批量校验失败'));
     }
   }, [handleWorkspaceChange, selectedRowKeys]);
 
@@ -759,7 +857,7 @@ function App() {
       handleWorkspaceChange(response.snapshot);
       message.success('批量停用完成');
     } catch (error) {
-      message.error(error?.message || '批量停用失败');
+      message.error(getErrorMessage(error, '批量停用失败'));
     }
   }, [handleWorkspaceChange, selectedRowKeys]);
 
@@ -961,12 +1059,13 @@ function App() {
                 </div>
               </Space>
               <Space wrap className="header-actions">
-                <Tooltip title={buildRefreshLabel(snapshot?.refreshedAt)}>
+                <Tooltip title={buildRefreshLabel(snapshot?.refreshedAt, isRefreshing)}>
                   <Button
-                    className="toolbar-button toolbar-icon-button"
-                    icon={<ReloadOutlined />}
-                    aria-label={buildRefreshLabel(snapshot?.refreshedAt)}
-                    onClick={() => loadWorkspace(false)}
+                    className={`toolbar-button toolbar-icon-button${isRefreshing ? ' toolbar-button-refreshing' : ''}`}
+                    icon={<ReloadOutlined spin={isRefreshing} />}
+                    aria-label={buildRefreshLabel(snapshot?.refreshedAt, isRefreshing)}
+                    disabled={isRefreshing}
+                    onClick={handleRefreshWorkspace}
                   />
                 </Tooltip>
                 <Tooltip title="应用设置">
@@ -1019,6 +1118,7 @@ function App() {
                     onOpenDetail={handleOpenDetail}
                     onOpenEditConfig={handleOpenEditConfig}
                     onOpenLogs={handleOpenLogs}
+                    onExecuteTaskAction={handleExecuteTaskAction}
                     onOpenContextMenu={handleOpenContextMenu}
                     selectedTaskKey={selectedTask?.id}
                     selectedRowKeys={selectedRowKeys}
@@ -1053,7 +1153,7 @@ function App() {
 
       <Drawer
         className="detail-drawer"
-        width={560}
+        width="min(720px, calc(100vw - 24px))"
         placement="right"
         open={isDetailDrawerOpen}
         onClose={() => setIsDetailDrawerOpen(false)}
@@ -1089,7 +1189,7 @@ function App() {
 
       <Drawer
         className="logs-drawer"
-        width={680}
+        width="min(920px, calc(100vw - 24px))"
         placement="right"
         open={isLogsDrawerOpen}
         onClose={() => setIsLogsDrawerOpen(false)}
@@ -1107,24 +1207,7 @@ function App() {
           <Menu
             selectable={false}
             onClick={({ key }) => handleContextMenuAction(key)}
-            items={[
-              {
-                key: 'detail',
-                icon: <EyeOutlined />,
-                label: '查看详情',
-              },
-              {
-                key: 'edit',
-                icon: <CodeOutlined />,
-                label: '编辑配置',
-                disabled: !contextMenu.task?.capabilities?.canEdit,
-              },
-              {
-                key: 'logs',
-                icon: <FileSearchOutlined />,
-                label: '查看日志',
-              },
-            ]}
+            items={buildTaskMenuItems(contextMenu.task)}
           />
         </div>
       ) : null}

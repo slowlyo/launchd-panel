@@ -8,7 +8,7 @@
 - 合并 `launchctl print` 与 `launchctl print-disabled` 的真实运行态、退出码和停用状态
 - 当前用户 `LaunchAgent` 支持真实创建、编辑、校验、加载、重载、启停、停用与删除
 - 系统级与全局目录任务真实展示但保持只读
-- 读取 `StandardOutPath` / `StandardErrorPath` 日志，并持久化应用内操作历史
+- 读取 `StandardOutPath` / `StandardErrorPath` 日志，新建任务时自动预填日志路径，并持久化应用内操作历史
 - 提供应用设置抽屉，支持按设备记住“是否展示系统任务”
 
 ## 技术栈

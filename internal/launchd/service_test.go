@@ -2,6 +2,7 @@ package launchd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 // fakeRunner 用于替代外部命令执行。
 type fakeRunner struct {
 	outputs map[string]string
+	errors  map[string]error
 	calls   []string
 }
 
@@ -18,6 +20,12 @@ type fakeRunner struct {
 func (f *fakeRunner) Run(_ context.Context, name string, args ...string) (string, error) {
 	call := name + " " + strings.Join(args, " ")
 	f.calls = append(f.calls, call)
+
+	// 命中预设错误时直接返回，模拟 launchctl 失败链路。
+	if err, ok := f.errors[call]; ok {
+		return f.outputs[call], err
+	}
+
 	return f.outputs[call], nil
 }
 
@@ -90,6 +98,38 @@ func TestApplyFormToMapPreservesUnknownKeys(t *testing.T) {
 	}
 }
 
+// TestNewServiceFormDataPrefillsLogPaths 确保新建任务会预填默认日志路径。
+func TestNewServiceFormDataPrefillsLogPaths(t *testing.T) {
+	service := &Service{
+		homeDir: "/Users/demo",
+	}
+
+	form := service.newServiceFormData()
+
+	if form.StandardOutPath != filepath.Join("/Users/demo", "Library", "Logs", "launchd-panel", "com.example.new-task.stdout.log") {
+		t.Fatalf("unexpected stdout path: %s", form.StandardOutPath)
+	}
+	if form.StandardErrorPath != filepath.Join("/Users/demo", "Library", "Logs", "launchd-panel", "com.example.new-task.stderr.log") {
+		t.Fatalf("unexpected stderr path: %s", form.StandardErrorPath)
+	}
+}
+
+// TestDefaultLogPathsPreferLabel 确保日志路径优先使用任务标识。
+func TestDefaultLogPathsPreferLabel(t *testing.T) {
+	service := &Service{
+		homeDir: "/Users/demo",
+	}
+
+	stdoutPath, stderrPath := service.defaultLogPaths("com.example.actual-label", "demo.plist")
+
+	if stdoutPath != filepath.Join("/Users/demo", "Library", "Logs", "launchd-panel", "com.example.actual-label.stdout.log") {
+		t.Fatalf("unexpected stdout path: %s", stdoutPath)
+	}
+	if stderrPath != filepath.Join("/Users/demo", "Library", "Logs", "launchd-panel", "com.example.actual-label.stderr.log") {
+		t.Fatalf("unexpected stderr path: %s", stderrPath)
+	}
+}
+
 // TestValidateCandidateMap 校验关键错误和警告都能被识别。
 func TestValidateCandidateMap(t *testing.T) {
 	runner := &fakeRunner{}
@@ -102,6 +142,48 @@ func TestValidateCandidateMap(t *testing.T) {
 	}
 	if !hasErrorIssue(issues) {
 		t.Fatalf("expected at least one error issue")
+	}
+}
+
+// TestValidateCandidateMapAllowsCreatableLogDir 确保可自动创建的日志目录不会误报。
+func TestValidateCandidateMapAllowsCreatableLogDir(t *testing.T) {
+	tempDir := t.TempDir()
+	commandPath := filepath.Join(tempDir, "demo.sh")
+	if err := os.WriteFile(commandPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write command file failed: %v", err)
+	}
+
+	issues := validateCandidateMap(context.Background(), &fakeRunner{}, map[string]interface{}{
+		"Label":           "demo",
+		"Program":         commandPath,
+		"StandardOutPath": filepath.Join(tempDir, "logs", "demo.stdout.log"),
+	}, filepath.Join(tempDir, "demo.plist"), "demo.plist")
+
+	for _, issue := range issues {
+		if issue.Field == "StandardOutPath" {
+			t.Fatalf("unexpected log path issue: %+v", issue)
+		}
+	}
+}
+
+// TestPrepareLogTargetsCreatesFiles 确保保存前会创建缺失的日志目录和文件。
+func TestPrepareLogTargetsCreatesFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	stdoutPath := filepath.Join(tempDir, "logs", "demo.stdout.log")
+	stderrPath := filepath.Join(tempDir, "logs", "demo.stderr.log")
+
+	if err := prepareLogTargets(map[string]interface{}{
+		"StandardOutPath":   stdoutPath,
+		"StandardErrorPath": stderrPath,
+	}); err != nil {
+		t.Fatalf("prepare log targets failed: %v", err)
+	}
+
+	if _, err := os.Stat(stdoutPath); err != nil {
+		t.Fatalf("stdout log file missing: %v", err)
+	}
+	if _, err := os.Stat(stderrPath); err != nil {
+		t.Fatalf("stderr log file missing: %v", err)
 	}
 }
 
@@ -139,5 +221,42 @@ func TestHistoryStoreAppendAndList(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "\"serviceId\": \"/tmp/a.plist\"") {
 		t.Fatalf("expected persisted history file to contain service id")
+	}
+}
+
+// TestExecuteStartReturnsDetailedBootstrapError 确保启动失败时会透出具体原因。
+func TestExecuteStartReturnsDetailedBootstrapError(t *testing.T) {
+	runner := &fakeRunner{
+		outputs: map[string]string{
+			"launchctl bootstrap gui/501 /tmp/demo.plist": "Bootstrap failed: 5: Input/output error",
+		},
+		errors: map[string]error{
+			"launchctl bootstrap gui/501 /tmp/demo.plist": errors.New("exit status 5"),
+		},
+	}
+	service := &Service{
+		runner: runner,
+		gui:    "gui/501",
+	}
+	record := &serviceRecord{
+		path:   "/tmp/demo.plist",
+		label:  "com.example.demo",
+		domain: "gui/501",
+		loaded: false,
+	}
+
+	success, message, err := service.executeStart(context.Background(), record)
+
+	if success {
+		t.Fatalf("expected start to fail")
+	}
+	if err == nil {
+		t.Fatalf("expected detailed error")
+	}
+	if !strings.Contains(message, "加载任务失败") {
+		t.Fatalf("expected prefixed message, got %q", message)
+	}
+	if !strings.Contains(message, "exit status 5") {
+		t.Fatalf("expected original bootstrap detail, got %q", message)
 	}
 }

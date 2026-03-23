@@ -1,8 +1,5 @@
 import { Button, Card, Dropdown, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import {
-  CodeOutlined,
-  EyeOutlined,
-  FileSearchOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
   MoreOutlined,
@@ -11,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import { memo, useMemo } from 'react';
 import StatusTag from './StatusTag';
+import { buildTaskMenuItems } from '../utils/taskMenus';
 
 const { Text } = Typography;
 
@@ -104,6 +102,7 @@ function TasksTable({
   onOpenDetail,
   onOpenEditConfig,
   onOpenLogs,
+  onExecuteTaskAction,
   onOpenContextMenu,
   selectedTaskKey,
   selectedRowKeys,
@@ -187,25 +186,9 @@ function TasksTable({
         render: (_, record) => (
           <Dropdown
             trigger={['click']}
+            overlayClassName="task-actions-dropdown"
             menu={{
-              items: [
-                {
-                  key: 'detail',
-                  icon: <EyeOutlined />,
-                  label: '查看详情',
-                },
-                {
-                  key: 'edit',
-                  icon: <CodeOutlined />,
-                  label: '编辑配置',
-                  disabled: !record.capabilities.canEdit,
-                },
-                {
-                  key: 'logs',
-                  icon: <FileSearchOutlined />,
-                  label: '查看日志',
-                },
-              ],
+              items: buildTaskMenuItems(record),
               onClick: ({ key, domEvent }) => {
                 // 下拉菜单点击不能冒泡到整行详情打开。
                 domEvent.stopPropagation();
@@ -220,7 +203,12 @@ function TasksTable({
                   return;
                 }
 
-                onOpenLogs(record);
+                if (key === 'logs') {
+                  onOpenLogs(record);
+                  return;
+                }
+
+                onExecuteTaskAction(record, key);
               },
             }}
           >
@@ -237,7 +225,7 @@ function TasksTable({
         ),
       },
     ],
-    [onOpenDetail, onOpenEditConfig, onOpenLogs]
+    [onExecuteTaskAction, onOpenDetail, onOpenEditConfig, onOpenLogs]
   );
 
   return (

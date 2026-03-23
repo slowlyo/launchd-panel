@@ -19,9 +19,10 @@ import {
   message,
 } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GetServiceEditor, SaveServiceConfig, ValidateServiceConfig } from '../../wailsjs/go/main/App';
 import PlistEditor from './PlistEditor';
+import { getErrorMessage } from '../utils/errors';
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
@@ -245,24 +246,85 @@ function ensurePlistFileName(value) {
 }
 
 /**
+ * 生成日志文件名片段。
+ */
+function buildLogFileStem(value) {
+  const content = String(value || '')
+    .trim()
+    .replace(/\.plist$/i, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^[-._]+|[-._]+$/g, '');
+
+  return content || 'task';
+}
+
+/**
+ * 根据当前任务身份推导日志文件名。
+ */
+function buildSuggestedLogStem(values = {}, preferredIdentity = '') {
+  const identity = buildGeneratedIdentity(values);
+  return buildLogFileStem(preferredIdentity || identity.fileName || identity.label || values.friendlyName);
+}
+
+/**
+ * 根据任务名称生成自动 Label。
+ */
+function buildAutoLabelFromFriendlyName(value) {
+  return `com.launchd-panel.${buildSlug(value || 'task')}`;
+}
+
+/**
+ * 根据当前输入生成自动文件名。
+ */
+function buildAutoFileName(values = {}, preferLabel = false) {
+  if (preferLabel && String(values.label || '').trim()) {
+    return ensurePlistFileName(String(values.label || '').trim());
+  }
+
+  if (String(values.label || '').trim()) {
+    return ensurePlistFileName(String(values.label || '').trim());
+  }
+
+  const seed = String(values.friendlyName || 'task').trim();
+  return ensurePlistFileName(`com.launchd-panel.${buildSlug(seed)}`);
+}
+
+/**
+ * 保持原目录，仅替换日志文件名。
+ */
+function replaceLogFileName(path, stem, stream) {
+  const content = String(path || '').trim();
+
+  if (!content) {
+    return '';
+  }
+
+  const lastSlashIndex = content.lastIndexOf('/');
+  const directory = lastSlashIndex >= 0 ? content.slice(0, lastSlashIndex + 1) : '';
+  return `${directory}${stem}.${stream}.log`;
+}
+
+/**
  * 根据用户输入推导内部标识。
  */
 function buildGeneratedIdentity(values = {}) {
   const fileName = ensurePlistFileName(values.fileName);
+  const label = String(values.label || '').trim();
 
-  if (values.label && fileName) {
+  if (label && fileName) {
     return {
-      label: String(values.label).trim(),
+      label,
       fileName,
     };
   }
 
   const seed = values.friendlyName || values.label || fileName.replace(/\.plist$/i, '') || 'task';
   const slug = buildSlug(seed);
+  const resolvedLabel = label || `com.launchd-panel.${slug}`;
 
   return {
-    label: String(values.label || `com.launchd-panel.${slug}`).trim(),
-    fileName: fileName || `${slug}.plist`,
+    label: resolvedLabel,
+    fileName: fileName || ensurePlistFileName(resolvedLabel),
   };
 }
 
@@ -463,6 +525,9 @@ function GuideChoiceGroup({ name, options }) {
 function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
   const [editor, setEditor] = useState(null);
   const [form] = Form.useForm();
+  const autoManagedRef = useRef({ label: true, fileName: true, stdout: true, stderr: true });
+  const autoIdentityRef = useRef({ label: '', fileName: '' });
+  const autoLogPathsRef = useRef({ stdout: '', stderr: '' });
   const [panelMode, setPanelMode] = useState(taskId ? '专业表单' : '麻瓜模式');
   const [rawXML, setRawXML] = useState('');
   const [validation, setValidation] = useState([]);
@@ -472,6 +537,9 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
 
   useEffect(() => {
     let cancelled = false;
+    autoManagedRef.current = { label: true, fileName: true, stdout: true, stderr: true };
+    autoIdentityRef.current = { label: '', fileName: '' };
+    autoLogPathsRef.current = { stdout: '', stderr: '' };
     setPanelMode(taskId ? '专业表单' : '麻瓜模式');
 
     /**
@@ -488,10 +556,23 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
         setEditor(response);
         setRawXML(response.rawXML || '');
         setValidation(response.validation || []);
-        form.setFieldsValue(buildFormValues(response));
+        const nextFormValues = buildFormValues(response);
+        form.setFieldsValue(nextFormValues);
+
+        // 新建任务时记录一份系统建议值，后续只在用户未手改时跟随身份字段更新。
+        if (!taskId) {
+          autoIdentityRef.current = {
+            label: nextFormValues.label || '',
+            fileName: ensurePlistFileName(nextFormValues.fileName || ''),
+          };
+          autoLogPathsRef.current = {
+            stdout: nextFormValues.standardOutPath || '',
+            stderr: nextFormValues.standardErrorPath || '',
+          };
+        }
       } catch (error) {
         if (!cancelled) {
-          message.error(error?.message || '加载编辑器失败');
+          message.error(getErrorMessage(error, '加载编辑器失败'));
         }
       }
     }
@@ -502,6 +583,93 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
       cancelled = true;
     };
   }, [form, taskId]);
+
+  /**
+   * 在麻瓜模式下自动维护名称、标识、文件名与日志路径。
+   */
+  function handleGuideValuesChange(changedValues) {
+    if (taskId || !editor || panelMode !== '麻瓜模式') {
+      return;
+    }
+
+    const values = form.getFieldsValue(true);
+    const currentLabel = String(values.label || '').trim();
+    const currentFileName = ensurePlistFileName(values.fileName || '');
+    const currentStandardOutPath = String(values.standardOutPath || '').trim();
+    const currentStandardErrorPath = String(values.standardErrorPath || '').trim();
+    const updates = {};
+
+    // 用户直接改 Label 时，只有改回自动值才恢复托管。
+    if (Object.prototype.hasOwnProperty.call(changedValues, 'label')) {
+      autoManagedRef.current.label = currentLabel === autoIdentityRef.current.label;
+    }
+
+    // 用户直接改文件名时，同样按“是否仍等于自动值”判断是否继续托管。
+    if (Object.prototype.hasOwnProperty.call(changedValues, 'fileName')) {
+      autoManagedRef.current.fileName = currentFileName === autoIdentityRef.current.fileName;
+    }
+
+    // 日志路径被用户手改后，后续不再自动覆盖。
+    if (Object.prototype.hasOwnProperty.call(changedValues, 'standardOutPath')) {
+      autoManagedRef.current.stdout = currentStandardOutPath === autoLogPathsRef.current.stdout;
+    }
+
+    // 错误日志沿用相同托管策略。
+    if (Object.prototype.hasOwnProperty.call(changedValues, 'standardErrorPath')) {
+      autoManagedRef.current.stderr = currentStandardErrorPath === autoLogPathsRef.current.stderr;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(changedValues, 'friendlyName') && autoManagedRef.current.label) {
+      updates.label = buildAutoLabelFromFriendlyName(values.friendlyName);
+    }
+
+    if (autoManagedRef.current.fileName) {
+      if (Object.prototype.hasOwnProperty.call(changedValues, 'label')) {
+        updates.fileName = buildAutoFileName({ ...values, label: currentLabel }, true);
+      } else if (Object.prototype.hasOwnProperty.call(changedValues, 'friendlyName')) {
+        updates.fileName = buildAutoFileName({ ...values, label: updates.label || currentLabel }, false);
+      }
+    }
+
+    let logSeed = '';
+    if (Object.prototype.hasOwnProperty.call(changedValues, 'fileName')) {
+      logSeed = currentFileName;
+    } else if (Object.prototype.hasOwnProperty.call(changedValues, 'label')) {
+      logSeed = currentLabel;
+    } else if (Object.prototype.hasOwnProperty.call(changedValues, 'friendlyName')) {
+      logSeed = updates.label || currentLabel || updates.fileName || currentFileName;
+    }
+
+    const nextStandardOutPath = logSeed
+      ? replaceLogFileName(autoLogPathsRef.current.stdout, buildSuggestedLogStem(values, logSeed), 'stdout')
+      : '';
+    const nextStandardErrorPath = logSeed
+      ? replaceLogFileName(autoLogPathsRef.current.stderr, buildSuggestedLogStem(values, logSeed), 'stderr')
+      : '';
+
+    // 只有日志路径仍等于系统建议值时才联动，避免覆盖用户手填路径。
+    if (autoManagedRef.current.stdout && nextStandardOutPath && currentStandardOutPath !== nextStandardOutPath) {
+      updates.standardOutPath = nextStandardOutPath;
+    }
+
+    // 错误日志保持同样的自动维护策略。
+    if (autoManagedRef.current.stderr && nextStandardErrorPath && currentStandardErrorPath !== nextStandardErrorPath) {
+      updates.standardErrorPath = nextStandardErrorPath;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      form.setFieldsValue(updates);
+    }
+
+    autoIdentityRef.current = {
+      label: updates.label || currentLabel,
+      fileName: ensurePlistFileName(updates.fileName || currentFileName),
+    };
+    autoLogPathsRef.current = {
+      stdout: updates.standardOutPath || currentStandardOutPath,
+      stderr: updates.standardErrorPath || currentStandardErrorPath,
+    };
+  }
 
   /**
    * 返回当前编辑请求体。
@@ -551,7 +719,7 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
       await syncDraftState();
       setPanelMode(nextMode);
     } catch (error) {
-      message.error(error?.message || '模式切换同步失败');
+      message.error(getErrorMessage(error, '模式切换同步失败'));
     } finally {
       setSwitchingMode(false);
     }
@@ -571,7 +739,7 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
       form.setFieldsValue(buildFormValues({ form: response.form, fileName: request.fileName }));
       message.success(response.ok ? '配置校验通过' : '配置存在问题，请先修复');
     } catch (error) {
-      message.error(error?.message || '校验失败');
+      message.error(getErrorMessage(error, '校验失败'));
     } finally {
       setSubmitting('');
     }
@@ -597,7 +765,7 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
       onSaved(response);
       message.success(applyLoad ? '配置已保存并加载' : '配置已保存');
     } catch (error) {
-      message.error(error?.message || '保存失败');
+      message.error(getErrorMessage(error, '保存失败'));
     } finally {
       setSubmitting('');
     }
@@ -976,7 +1144,7 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
     }
 
     return (
-      <Form layout="vertical" form={form} disabled={editor?.readOnly}>
+      <Form layout="vertical" form={form} disabled={editor?.readOnly} onValuesChange={handleGuideValuesChange}>
         {panelMode === '麻瓜模式' ? renderGuideForm() : renderProfessionalForm()}
       </Form>
     );
