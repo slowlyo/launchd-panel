@@ -1,15 +1,14 @@
 import { Tooltip, Typography } from 'antd';
-import { summaryCards } from './mockData.jsx';
 
 const { Text } = Typography;
 
 /**
  * 渲染概览统计区。
  */
-function SummarySection() {
+function SummarySection({ cards }) {
   return (
     <div className="summary-strip">
-      {summaryCards.map((card) => (
+      {cards.map((card) => (
         <Tooltip key={card.label} title={card.note} placement="top">
           <div className="summary-strip-item" tabIndex={0}>
             <div className="summary-strip-value">

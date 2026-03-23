@@ -1,5 +1,4 @@
 import { Flex, Menu, Tag, Typography } from 'antd';
-import { navigationGroups } from './mockData.jsx';
 
 const { Text, Title } = Typography;
 
@@ -36,10 +35,10 @@ export function SidebarBrand() {
 /**
  * 渲染侧边导航分组。
  */
-function Navigation({ selectedKey, onSelect }) {
+function Navigation({ selectedKey, onSelect, groups }) {
   return (
     <div className="nav-groups full-width">
-      {navigationGroups.map((group) => (
+      {groups.map((group) => (
         <div key={group.key} className="nav-group">
           <div className="nav-group-header">
             <Text className="menu-group-title">{group.title}</Text>

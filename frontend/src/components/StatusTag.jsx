@@ -11,6 +11,8 @@ function getStatusMeta(status) {
     failed: { badge: 'error' },
     loaded: { badge: 'processing' },
     warning: { badge: 'warning' },
+    invalid: { badge: 'error' },
+    disabled: { badge: 'default' },
     idle: { badge: 'default' },
   };
 

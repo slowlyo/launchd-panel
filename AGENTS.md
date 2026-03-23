@@ -7,6 +7,7 @@
 项目当前结构由 Go 后端与 React 前端组成：
 - 后端入口：[`main.go`](main.go)
 - 应用结构：[`app.go`](app.go)
+- launchd 服务：[`internal/launchd/service.go`](internal/launchd/service.go)
 - 前端目录：[`frontend/`](frontend)
 - 前端主界面入口：[`frontend/src/App.jsx`](frontend/src/App.jsx)
 
@@ -15,12 +16,14 @@
 ### 后端
 - Go
 - [`Wails`](wails.json)
+- [`howett.net/plist`](go.mod)
 
 ### 前端
 - React 18
 - Vite
 - [`antd`](frontend/package.json:13)
 - [`@ant-design/icons`](frontend/package.json:12)
+- [`@monaco-editor/react`](frontend/package.json:14)
 - [`simplebar-react`](frontend/package.json:16)
 - [`tailwindcss`](frontend/package.json:17)
 
@@ -29,6 +32,12 @@
 ```text
 launchd-panel/
 ├── app.go
+├── internal/
+│   └── launchd/
+│       ├── history.go
+│       ├── service.go
+│       ├── service_test.go
+│       └── types.go
 ├── main.go
 ├── go.mod
 ├── README.md
@@ -45,13 +54,33 @@ launchd-panel/
     │       ├── DetailPanel.jsx
     │       ├── LogHistoryPanel.jsx
     │       ├── Navigation.jsx
+    │       ├── PlistEditor.jsx
     │       ├── ScrollArea.jsx
     │       ├── StatusTag.jsx
     │       ├── SummarySection.jsx
     │       ├── TasksTable.jsx
-    │       └── mockData.jsx
     └── wailsjs/
 ```
+
+## 后端架构约定
+
+### 服务边界
+当前后端由 [`internal/launchd/service.go`](internal/launchd/service.go) 统一负责：
+- 目录扫描
+- plist 解析与 XML 回写
+- `launchctl` 命令封装
+- 日志读取
+- 应用内操作历史持久化
+
+### Wails 绑定
+[`app.go`](app.go) 仅负责暴露 Wails 方法，不承载 launchd 业务细节。
+
+### 管理范围
+- 当前用户 `~/Library/LaunchAgents`：全功能管理
+- `/Library/LaunchAgents`：真实展示，只读
+- `/Library/LaunchDaemons`：真实展示，只读
+- `/System/Library/LaunchAgents`：真实展示，只读
+- `/System/Library/LaunchDaemons`：真实展示，只读
 
 ## 前端架构约定
 
@@ -60,12 +89,15 @@ launchd-panel/
 - 布局骨架
 - antd 主题配置
 - 导航状态管理
+- 工作区快照加载与刷新
 - 当前任务选择状态
+- 批量选择状态
 - 侧边栏与内容区滚动容器编排
 - 首屏按“紧凑概览 + 任务列表”组织主工作区
 - 任务列表单击默认打开详情抽屉，右键通过上下文菜单选择详情、编辑或日志
 - 表格提供显式“操作”列下拉菜单，方便新用户发现详情、编辑与日志入口
 - 选中任务后的详情、编辑、日志均通过右侧抽屉承载，避免挤压任务列表
+- 配置抽屉提供“麻瓜模式 / 专业表单 / 原始 plist”三种维护入口
 
 ### 组件拆分
 界面按职责拆分为以下子组件：
@@ -73,18 +105,19 @@ launchd-panel/
 - [`SummarySection`](frontend/src/components/SummarySection.jsx:7)：顶部紧凑统计概览
 - [`TasksTable`](frontend/src/components/TasksTable.jsx:9)：任务列表表格
 - [`ConfigurationPanel`](frontend/src/components/ConfigurationPanel.jsx:8)：配置编辑展示区
+- [`PlistEditor`](frontend/src/components/PlistEditor.jsx:1)：基于 Monaco Editor 的 plist 原始编辑器
 - [`LogHistoryPanel`](frontend/src/components/LogHistoryPanel.jsx:8)：日志与执行历史
 - [`DetailPanel`](frontend/src/components/DetailPanel.jsx:15)：任务详情与风险信息
 - [`ScrollArea`](frontend/src/components/ScrollArea.jsx:15)：统一滚动区域封装
 - [`StatusTag`](frontend/src/components/StatusTag.jsx:21)：状态展示组件
 
 ### 数据组织
-原型阶段的展示数据集中在 [`frontend/src/components/mockData.jsx`](frontend/src/components/mockData.jsx)。
+当前前端数据全部通过 [`frontend/wailsjs/go/main/App.js`](frontend/wailsjs/go/main/App.js) 调用 Wails 绑定方法获取。
 
-后续接入真实数据时建议：
-- 将 UI mock 数据替换为接口层或 Wails runtime 数据层
-- 保持组件只负责渲染，不直接耦合数据获取逻辑
-- 将状态映射逻辑继续保留在独立模块中
+约定：
+- 列表、概览、导航计数来自 `GetWorkspaceSnapshot`
+- 详情、编辑、日志、历史按抽屉打开时按需加载
+- 表单模式保存时由后端保留未覆盖的原始 plist 键
 
 ## 设计与交互约定
 
@@ -153,20 +186,11 @@ launchd-panel/
 
 ## 后续开发建议
 
-### 数据接入
-后续建议将以下模块逐步替换为真实数据：
-- 任务列表
-- 任务详情
-- 日志内容
-- 历史记录
-- 配置校验结果
-
 ### 推荐优先级
-1. 建立 Go -> Wails -> React 的数据桥接
-2. 定义 launchd 任务领域模型
-3. 接入真实扫描结果与任务状态
-4. 实现配置读写与校验
-5. 实现日志读取与历史记录
+1. 为系统级写操作补管理员授权方案
+2. 为日志视图补 stdout/stderr 合并排序策略
+3. 细化高级 `KeepAlive`、`MachServices` 等复杂字段的表单编辑能力
+4. 优化前端按抽屉或功能拆包，降低主 chunk 体积
 
 ## Agent 工作指引
 
@@ -188,7 +212,7 @@ launchd-panel/
 
 ## 禁止事项
 - 不要无必要替换 [`antd`](frontend/package.json:12) 为其他 UI 框架
-- 不要将大量静态数据重新散落到多个页面文件
+- 不要重新引入分散的静态 mock 数据替代真实接口
 - 不要引入与当前需求无关的复杂状态管理库
 - 不要为“未来可能用到”提前做重型抽象
 
