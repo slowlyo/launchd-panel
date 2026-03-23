@@ -1,79 +1,220 @@
 # launchd-panel
 
-基于 [`Wails`](wails.json) 与 React 的 macOS [`launchd`](main.go:1) 任务管理面板。
+A macOS desktop app for inspecting and managing `launchd` jobs and plist files, built with Wails, Go, and React.
 
-## 当前能力
+[简体中文](./README.zh-CN.md)
 
-- 扫描 `~/Library/LaunchAgents`、`/Library/LaunchAgents`、`/Library/LaunchDaemons`、`/System/Library/LaunchAgents`、`/System/Library/LaunchDaemons`
-- 合并 `launchctl print` 与 `launchctl print-disabled` 的真实运行态、退出码和停用状态
-- 当前用户 `LaunchAgent` 支持真实创建、编辑、校验、加载、重载、启停、停用与删除
-- 系统级与全局目录任务真实展示但保持只读
-- 读取 `StandardOutPath` / `StandardErrorPath` 日志，新建任务时自动预填日志路径，并持久化应用内操作历史
-- 提供应用设置抽屉，支持按设备记住“是否展示系统任务”
+## Overview
 
-## 技术栈
+`launchd-panel` is a macOS desktop app for inspecting and managing `launchd` jobs.
 
-- Go
-- Wails
-- [`howett.net/plist`](go.mod)
+It is built with Wails, uses Go for `launchctl`, plist, and log handling, and uses React for the desktop workspace. The current product focuses on:
+
+- browsing user, local, and system `launchd` jobs from one place
+- providing real management actions for user-scoped `LaunchAgent` jobs
+- editing plist data through a friendlier UI instead of raw XML only
+- combining logs, runtime status, validation, and action history in one workspace
+
+## Current Features
+
+### Workspace Snapshot
+
+- Scans the following locations into one unified workspace
+  - `~/Library/LaunchAgents`
+  - `/Library/LaunchAgents`
+  - `/Library/LaunchDaemons`
+  - `/System/Library/LaunchAgents`
+  - `/System/Library/LaunchDaemons`
+- Merges runtime data from `launchctl print` and `launchctl print-disabled`
+- Shows job status, exit code, disabled state, schedule, command summary, log availability, and history count
+- Provides summary cards and navigation counters
+- Supports filtering by navigation group, search keyword, and current selection state
+
+### Job Management
+
+- Real write operations are available for `~/Library/LaunchAgents`
+- Supported per-job actions
+  - start
+  - stop
+  - enable
+  - disable
+  - reload
+  - validate
+  - delete
+- Supported batch actions
+  - batch validate
+  - batch disable
+- System and global jobs are shown with real data but remain read-only
+
+### Configuration Editing
+
+- Creating and editing jobs uses the same configuration drawer
+- Three editing modes are available
+  - guided mode
+  - professional form
+  - raw plist
+- Structured editing is supported for
+  - `Label`
+  - `Program`
+  - `ProgramArguments`
+  - `WorkingDirectory`
+  - `RunAtLoad`
+  - `KeepAlive`
+  - `StartInterval`
+  - `StartCalendarInterval`
+  - `StandardOutPath`
+  - `StandardErrorPath`
+  - `EnvironmentVariables`
+  - `WatchPaths`
+- Unmodified plist keys are preserved when saving from form mode
+- New jobs can auto-fill friendly file names and suggested log paths
+- You can save only, or save and immediately reload the job
+
+### Details, Logs, and History
+
+- The detail drawer shows
+  - status highlights
+  - alerts and validation results
+  - plist-derived fields
+  - `launchctl print` runtime output
+  - recent action history
+- The log drawer supports
+  - `stdout`
+  - `stderr`
+  - combined view
+  - auto refresh
+  - live tracking
+  - downloading the current log view
+  - clearing the current log file
+- Action history is persisted locally and remains available after app restarts
+
+### Workspace Settings
+
+- Theme modes
+  - light
+  - dark
+  - follow system
+- Remembers whether system jobs should be shown
+- Settings are persisted in the local config directory
+
+## Management Scope
+
+| Scope | Path | Capability |
+| --- | --- | --- |
+| Current user agent | `~/Library/LaunchAgents` | full management |
+| Local agent | `/Library/LaunchAgents` | read-only |
+| Local daemon | `/Library/LaunchDaemons` | read-only |
+| System agent | `/System/Library/LaunchAgents` | read-only |
+| System daemon | `/System/Library/LaunchDaemons` | read-only |
+
+## UI Structure
+
+- The main screen uses a compact summary plus job table layout
+- The left navigation switches between scope, status, logs, history, and related views
+- Clicking a row opens the detail drawer by default
+- The context menu and action dropdown can open details, editing, logs, or run actions directly
+- Details, configuration, and logs all stay in the right-side drawer so the main table remains the primary workspace
+
+## Tech Stack
+
+### Backend
+
+- Go 1.23
+- Wails v2
+- `howett.net/plist`
+
+### Frontend
+
 - React 18
-- [`antd`](frontend/package.json:13)
-- [`@monaco-editor/react`](frontend/package.json:12)
-- [`simplebar-react`](frontend/package.json:16)
-- [`tailwindcss`](frontend/package.json:17)
+- Vite
+- Ant Design
+- Monaco Editor
+- simplebar-react
+- Tailwind CSS v4
 
-## 开发
+## Project Structure
 
-前端开发目录：[`frontend/`](frontend)
+```text
+launchd-panel/
+├── app.go
+├── main.go
+├── settings.go
+├── internal/
+│   └── launchd/
+│       ├── history.go
+│       ├── service.go
+│       ├── service_test.go
+│       └── types.go
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── style.css
+│   │   └── components/
+│   │       ├── ConfigurationPanel.jsx
+│   │       ├── DetailPanel.jsx
+│   │       ├── LogHistoryPanel.jsx
+│   │       ├── Navigation.jsx
+│   │       ├── PlistEditor.jsx
+│   │       ├── ScrollArea.jsx
+│   │       ├── SettingsPanel.jsx
+│   │       ├── StatusTag.jsx
+│   │       ├── SummarySection.jsx
+│   │       └── TasksTable.jsx
+├── build/
+├── README.md
+├── README.zh-CN.md
+└── wails.json
+```
+
+## Development
+
+### Requirements
+
+- macOS
+- Go 1.23 or later
+- Node.js 18 or later
+- `pnpm`
+- Wails CLI
+
+### Install Dependencies
 
 ```bash
-cd frontend
+cd "frontend"
 pnpm install
+```
+
+### Frontend Development
+
+```bash
+cd "frontend"
 pnpm dev
 ```
 
-桌面联调：
+### Desktop Development
 
 ```bash
 wails dev
 ```
 
-## 构建
+## Build
 
-前端构建：
+### Frontend Build
 
 ```bash
-cd frontend
+cd "frontend"
 pnpm build
 ```
 
-桌面应用构建：
+### Desktop App Build
 
 ```bash
 wails build
 ```
 
-## 样式方案
+## Notes
 
-- 全局样式入口：[`frontend/src/style.css`](frontend/src/style.css)
-- 通过 [`frontend/postcss.config.js`](frontend/postcss.config.js) 接入 Tailwind CSS v4
-- 保留 [`antd`](frontend/package.json:13) 组件体系，使用 Tailwind 工具类与组件层样式简化布局和视觉定制
-- 滚动区域统一通过 [`frontend/src/components/ScrollArea.jsx`](frontend/src/components/ScrollArea.jsx) 封装 [`simplebar-react`](frontend/package.json:16)
-
-## 后端结构
-
-- Wails 绑定入口：[`app.go`](app.go)
-- launchd 领域服务：[`internal/launchd/service.go`](internal/launchd/service.go)
-- 历史持久化：[`internal/launchd/history.go`](internal/launchd/history.go)
-- 对外传输类型：[`internal/launchd/types.go`](internal/launchd/types.go)
-
-## 界面布局
-
-- 首屏采用“紧凑概览 + 任务列表”结构，任务列表作为主工作区优先展示
-- 头部工具栏提供“设置”入口，当前默认隐藏系统级与全局任务，可按需打开
-- 单击任务列表项默认打开详情抽屉，右键可选择详情、编辑配置或日志
-- 表格操作列提供同样的下拉菜单入口，降低新用户学习成本
-- 详情、编辑配置和日志历史统一通过右侧抽屉承载，减少对任务浏览与筛选的干扰
-- 配置抽屉支持“麻瓜模式 / 专业表单 / 原始 plist”三种维护模式
-- 原始 plist 模式使用 Monaco Editor 处理 XML，便于维护复杂键和值
-- 表格支持多选后批量校验与批量停用
+- The current version only allows write operations for user-scoped `LaunchAgent` jobs
+- System and local jobs are hidden by default and can be enabled from settings
+- Log viewing depends on configured `StandardOutPath` and `StandardErrorPath` values
