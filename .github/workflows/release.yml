@@ -1,0 +1,65 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: launchd-panel
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装 Wails CLI
+        shell: bash
+        run: |
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: 构建 macOS 应用
+        run: wails build -clean -platform darwin/universal
+
+      - name: 打包 release 产物
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE_NAME="${APP_NAME}_${VERSION}_darwin_universal.zip"
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent "build/bin/${APP_NAME}.app" "release/${ARCHIVE_NAME}"
+          shasum -a 256 "release/${ARCHIVE_NAME}" > "release/${ARCHIVE_NAME}.sha256"
+
+      - name: 发布 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            release/*.zip
+            release/*.sha256

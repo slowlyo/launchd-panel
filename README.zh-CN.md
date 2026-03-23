@@ -140,6 +140,9 @@
 
 ```text
 launchd-panel/
+├── .github/
+│   └── workflows/
+│       └── release.yml
 ├── app.go
 ├── main.go
 ├── settings.go
@@ -216,6 +219,16 @@ pnpm build
 ```bash
 wails build
 ```
+
+### Tag 发版
+
+推送任意 tag 后都会自动触发 GitHub Actions，例如 `v0.1.0`。
+
+流水线会完成以下动作：
+
+- 执行 `wails build -clean -platform darwin/universal`
+- 将 `build/bin/launchd-panel.app` 打包为 zip
+- 自动创建 GitHub Release，并上传 zip 与 SHA-256 校验文件
 
 ## 说明
 

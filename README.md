@@ -140,6 +140,9 @@ It is built with Wails, uses Go for `launchctl`, plist, and log handling, and us
 
 ```text
 launchd-panel/
+├── .github/
+│   └── workflows/
+│       └── release.yml
 ├── app.go
 ├── main.go
 ├── settings.go
@@ -216,6 +219,16 @@ pnpm build
 ```bash
 wails build
 ```
+
+### Tag Release
+
+Push any tag, for example `v0.1.0`, to trigger GitHub Actions.
+
+The workflow will:
+
+- build the macOS app with `wails build -clean -platform darwin/universal`
+- package `build/bin/launchd-panel.app` into a zip archive
+- publish a GitHub Release and upload the zip plus SHA-256 checksum
 
 ## Notes
 

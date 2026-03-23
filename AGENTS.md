@@ -31,6 +31,9 @@
 
 ```text
 launchd-panel/
+├── .github/
+│   └── workflows/
+│       └── release.yml
 ├── app.go
 ├── internal/
 │   └── launchd/
@@ -178,6 +181,11 @@ launchd-panel/
 ### 构建检查
 前端改动后至少执行：
 - [`pnpm build`](frontend/package.json:8)
+
+Tag 发版由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 负责：
+- 推送任意 tag 时自动执行
+- 在 macOS runner 上执行 `wails build -clean -platform darwin/universal`
+- 自动创建 GitHub Release，并上传 zip 与 SHA-256 校验文件
 
 当前已知情况：
 - 构建可通过
