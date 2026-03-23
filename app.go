@@ -74,6 +74,11 @@ func (a *App) ReadServiceLogs(req launchd.ReadServiceLogsRequest) (launchd.ReadS
 	return a.service.ReadServiceLogs(a.requestContext(), req)
 }
 
+// ClearServiceLogs 清空任务日志。
+func (a *App) ClearServiceLogs(req launchd.ClearServiceLogsRequest) (launchd.ClearServiceLogsResponse, error) {
+	return a.service.ClearServiceLogs(a.requestContext(), req)
+}
+
 // ListServiceHistory 返回任务历史。
 func (a *App) ListServiceHistory(id string) ([]launchd.HistoryEntry, error) {
 	return a.service.ListServiceHistory(a.requestContext(), id)

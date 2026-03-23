@@ -187,6 +187,57 @@ func TestPrepareLogTargetsCreatesFiles(t *testing.T) {
 	}
 }
 
+// TestTruncateLogFilesClearsContent 确保日志清空仅截断内容，不删除文件。
+func TestTruncateLogFilesClearsContent(t *testing.T) {
+	tempDir := t.TempDir()
+	logPath := filepath.Join(tempDir, "demo.log")
+
+	if err := os.WriteFile(logPath, []byte("line 1\nline 2\n"), 0o644); err != nil {
+		t.Fatalf("write log file failed: %v", err)
+	}
+
+	if err := truncateLogFiles([]string{logPath}); err != nil {
+		t.Fatalf("truncate log file failed: %v", err)
+	}
+
+	info, err := os.Stat(logPath)
+	if err != nil {
+		t.Fatalf("stat truncated log file failed: %v", err)
+	}
+	if info.Size() != 0 {
+		t.Fatalf("expected log file to be empty, got %d", info.Size())
+	}
+}
+
+// TestReadLogFileStripsANSIEscapeSequences 确保日志读取会移除 ANSI 控制序列。
+func TestReadLogFileStripsANSIEscapeSequences(t *testing.T) {
+	tempDir := t.TempDir()
+	logPath := filepath.Join(tempDir, "ansi.log")
+	content := strings.Join([]string{
+		"\x1b[1;33mWARN\x1b[0m rpc warning",
+		"\x1b]0;launchd-panel\x07\x1b[1;32mNOTICE\x1b[0m 中文正常",
+		"",
+	}, "\n")
+
+	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write ansi log file failed: %v", err)
+	}
+
+	lines, warning := readLogFile(logPath, "stdout", 10)
+	if warning != "" {
+		t.Fatalf("expected empty warning, got %q", warning)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
+	if lines[0].Text != "WARN rpc warning" {
+		t.Fatalf("unexpected first line: %q", lines[0].Text)
+	}
+	if lines[1].Text != "NOTICE 中文正常" {
+		t.Fatalf("unexpected second line: %q", lines[1].Text)
+	}
+}
+
 // TestHistoryStoreAppendAndList 确保历史记录能落盘并按倒序返回。
 func TestHistoryStoreAppendAndList(t *testing.T) {
 	store := &HistoryStore{

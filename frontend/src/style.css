@@ -807,6 +807,53 @@
     margin-bottom: 0 !important;
   }
 
+  .result-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+    color: var(--result-indicator-color, var(--text-subtle));
+  }
+
+  .result-indicator-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
+  }
+
+  .result-indicator-text.ant-typography {
+    min-width: 0;
+    margin-bottom: 0 !important;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: currentColor !important;
+  }
+
+  .result-indicator--success {
+    --result-indicator-color: #389e0d;
+  }
+
+  .result-indicator--running {
+    --result-indicator-color: #52c41a;
+  }
+
+  .result-indicator--processing {
+    --result-indicator-color: #1677ff;
+  }
+
+  .result-indicator--error {
+    --result-indicator-color: #ff4d4f;
+  }
+
+  .result-indicator--muted {
+    --result-indicator-color: #8c8c8c;
+  }
+
   .tasks-table .ant-table-selection-column {
     width: 40px !important;
     min-width: 40px !important;
@@ -967,6 +1014,41 @@
     color: var(--text-subtle);
   }
 
+  .status-tag--compact {
+    min-width: 0;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: 12px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.82),
+      0 4px 10px rgba(15, 23, 42, 0.03);
+  }
+
+  .status-tag--compact .status-tag-main {
+    gap: 6px;
+  }
+
+  .status-tag--compact .status-tag-icon-shell {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }
+
+  .status-tag--compact .status-tag-icon {
+    font-size: 10px;
+  }
+
+  .status-tag--compact .status-tag-text.ant-typography {
+    font-size: 13px;
+    line-height: 1.1;
+  }
+
+  .status-tag--compact .status-tag-detail.ant-typography {
+    padding-left: 24px;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
   .status-tag--running {
     --status-color: #52c41a;
     --status-bg: rgba(82, 196, 26, 0.14);
@@ -1054,6 +1136,159 @@
     margin-bottom: 4px !important;
   }
 
+  .detail-kicker {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #1677ff;
+  }
+
+  .detail-hero-shell {
+    position: relative;
+    overflow: hidden;
+    padding-top: 2px;
+  }
+
+  .detail-hero-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .detail-hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .detail-badge-row {
+    width: 100%;
+  }
+
+  .detail-chip.ant-tag {
+    margin-inline-end: 0 !important;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(22, 119, 255, 0.1);
+    background: rgba(22, 119, 255, 0.06);
+    color: #175cd3;
+    font-size: 12px;
+  }
+
+  .detail-path.ant-typography {
+    margin-bottom: 0 !important;
+    color: var(--text-subtle);
+    word-break: break-all;
+  }
+
+  .detail-highlight-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .detail-highlight-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 128px;
+    padding: 16px 18px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    border-radius: 20px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.94)),
+      var(--field-card-bg);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+  }
+
+  .detail-highlight-card--command {
+    background:
+      radial-gradient(circle at top right, rgba(22, 119, 255, 0.12), transparent 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.94));
+  }
+
+  .detail-highlight-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-subtle);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .detail-highlight-value.ant-typography {
+    margin-bottom: 0 !important;
+    font-size: 18px;
+    line-height: 1.4;
+    color: var(--text-main);
+    word-break: break-word;
+  }
+
+  .detail-highlight-helper.ant-typography {
+    margin-bottom: 0 !important;
+    line-height: 1.6;
+    word-break: break-word;
+  }
+
+  .detail-action-card .ant-card-head,
+  .detail-alert-card .ant-card-head,
+  .detail-overview-card .ant-card-head,
+  .detail-runtime-card .ant-card-head {
+    min-height: 44px;
+  }
+
+  .detail-action-group-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .detail-action-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.62);
+  }
+
+  .detail-action-group--danger {
+    border-color: rgba(245, 34, 45, 0.12);
+    background: rgba(255, 241, 240, 0.72);
+  }
+
+  .detail-action-group-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .detail-action-group-title.ant-typography {
+    display: block;
+    margin-bottom: 2px !important;
+    color: var(--text-main);
+  }
+
+  .detail-action-group-description.ant-typography {
+    display: block;
+    margin-bottom: 0 !important;
+    line-height: 1.5;
+  }
+
+  .detail-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 10px;
+  }
+
+  .detail-actions-grid .ant-btn {
+    justify-content: center;
+  }
+
   .inner-card {
     @apply border shadow-none;
     border-color: rgba(15, 23, 42, 0.06) !important;
@@ -1064,6 +1299,101 @@
   .detail-descriptions .ant-descriptions-item-label {
     width: 132px;
     color: #8c8c8c;
+  }
+
+  .detail-descriptions--compact .ant-descriptions-item-label {
+    width: 108px;
+  }
+
+  .detail-group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .detail-group-card {
+    height: 100%;
+  }
+
+  .detail-group-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .detail-group-eyebrow {
+    display: inline-block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #1677ff;
+  }
+
+  .detail-group-title {
+    margin-bottom: 0 !important;
+  }
+
+  .detail-validation-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .detail-validation-summary--compact {
+    margin-bottom: 12px;
+  }
+
+  .detail-validation-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    border-radius: 16px;
+    background: var(--field-card-bg);
+  }
+
+  .detail-validation-label {
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .detail-validation-value.ant-typography {
+    font-size: 24px;
+    line-height: 1;
+    color: var(--text-main);
+  }
+
+  .detail-validation-value--error.ant-typography {
+    color: #cf1322;
+  }
+
+  .detail-validation-value--warning.ant-typography {
+    color: #d48806;
+  }
+
+  .detail-runtime-hint.ant-typography {
+    display: block;
+    margin-bottom: 12px !important;
+  }
+
+  .detail-history-card .ant-timeline {
+    margin-top: 4px;
+  }
+
+  .detail-history-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .detail-alert-more.ant-typography {
+    display: block;
+    margin-top: 2px;
   }
 
   .field-card {
@@ -1314,11 +1644,33 @@
 
   .log-viewer {
     @apply overflow-auto rounded-[18px] px-4 py-3.5 font-mono text-xs leading-[1.7] text-neutral-100;
+    min-height: 240px;
+    max-height: min(52vh, 520px);
     border: 1px solid rgba(15, 23, 42, 0.14);
     background:
       linear-gradient(180deg, rgba(11, 23, 48, 0.98), rgba(10, 18, 35, 0.98)),
       #0b1220;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .log-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .log-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .log-paths.ant-typography {
+    margin-bottom: 0 !important;
+    color: var(--text-subtle);
+    word-break: break-all;
   }
 
   .log-line + .log-line {
@@ -1433,6 +1785,14 @@
   .detail-card .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
     color: #1677ff !important;
     font-weight: 600;
+  }
+
+  .detail-tabs .ant-tabs-tab {
+    padding-block: 10px !important;
+  }
+
+  .detail-tabs .ant-tabs-content-holder {
+    padding-top: 8px;
   }
 
   .panel-extra-actions {
@@ -1637,6 +1997,41 @@
     background: rgba(22, 119, 255, 0.18);
   }
 
+  :root[data-theme='dark'] .detail-chip.ant-tag {
+    border-color: rgba(22, 119, 255, 0.2);
+    background: rgba(22, 119, 255, 0.16);
+    color: #91caff;
+  }
+
+  :root[data-theme='dark'] .detail-highlight-card {
+    border-color: rgba(148, 163, 184, 0.14);
+    background:
+      linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(15, 23, 42, 0.94)),
+      var(--field-card-bg);
+    box-shadow: 0 14px 34px rgba(2, 8, 23, 0.18);
+  }
+
+  :root[data-theme='dark'] .detail-highlight-card--command {
+    background:
+      radial-gradient(circle at top right, rgba(22, 119, 255, 0.18), transparent 34%),
+      linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(15, 23, 42, 0.94));
+  }
+
+  :root[data-theme='dark'] .detail-validation-stat {
+    border-color: rgba(148, 163, 184, 0.14);
+    background: rgba(17, 24, 39, 0.88);
+  }
+
+  :root[data-theme='dark'] .detail-action-group {
+    border-color: rgba(148, 163, 184, 0.14);
+    background: rgba(17, 24, 39, 0.72);
+  }
+
+  :root[data-theme='dark'] .detail-action-group--danger {
+    border-color: rgba(255, 120, 117, 0.2);
+    background: rgba(60, 18, 24, 0.46);
+  }
+
   :root[data-theme='dark'] .settings-item-control.ant-segmented {
     background: rgba(148, 163, 184, 0.12);
   }
@@ -1691,6 +2086,21 @@
 
     .surface-card .ant-card-body {
       padding: 14px;
+    }
+
+    .detail-hero-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .detail-highlight-grid,
+    .detail-validation-summary,
+    .detail-action-group-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .detail-actions-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .detail-descriptions .ant-descriptions-item-label,

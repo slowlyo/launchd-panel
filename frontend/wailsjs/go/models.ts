@@ -299,6 +299,36 @@ export namespace launchd {
 		}
 	}
 	
+	export class ClearServiceLogsRequest {
+	    id: string;
+	    stream: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClearServiceLogsRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.stream = source["stream"];
+	    }
+	}
+	export class ClearServiceLogsResponse {
+	    serviceId: string;
+	    stream: string;
+	    clearedPaths: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClearServiceLogsResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.serviceId = source["serviceId"];
+	        this.stream = source["stream"];
+	        this.clearedPaths = source["clearedPaths"];
+	    }
+	}
 	export class DetailAlert {
 	    type: string;
 	    message: string;

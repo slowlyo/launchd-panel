@@ -6,6 +6,10 @@ export function BatchExecute(arg1) {
   return window['go']['main']['App']['BatchExecute'](arg1);
 }
 
+export function ClearServiceLogs(arg1) {
+  return window['go']['main']['App']['ClearServiceLogs'](arg1);
+}
+
 export function ExecuteServiceAction(arg1) {
   return window['go']['main']['App']['ExecuteServiceAction'](arg1);
 }

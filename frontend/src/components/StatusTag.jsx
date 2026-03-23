@@ -31,12 +31,12 @@ function getStatusMeta(status) {
 /**
  * 渲染任务状态标签。
  */
-function StatusTag({ status, text, detail }) {
+function StatusTag({ status, text, detail, compact = false }) {
   const meta = getStatusMeta(status);
   const Icon = meta.icon;
 
   return (
-    <div className={`status-tag status-tag--${meta.tone}`}>
+    <div className={`status-tag status-tag--${meta.tone} ${compact ? 'status-tag--compact' : ''}`}>
       <div className="status-tag-main">
         <span className="status-tag-icon-shell" aria-hidden="true">
           <Icon className="status-tag-icon" />

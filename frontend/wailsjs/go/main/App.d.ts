@@ -4,6 +4,8 @@ import {launchd} from '../models';
 
 export function BatchExecute(arg1:launchd.BatchExecuteRequest):Promise<launchd.BatchExecuteResponse>;
 
+export function ClearServiceLogs(arg1:launchd.ClearServiceLogsRequest):Promise<launchd.ClearServiceLogsResponse>;
+
 export function ExecuteServiceAction(arg1:launchd.ExecuteServiceActionRequest):Promise<launchd.ExecuteServiceActionResponse>;
 
 export function GetServiceDetail(arg1:string):Promise<launchd.ServiceDetail>;

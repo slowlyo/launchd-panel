@@ -94,6 +94,50 @@ function renderEllipsisText(value, type = undefined) {
 }
 
 /**
+ * 为最近结果选择颜色语义。
+ */
+function resolveResultTone(record, value) {
+  if (record.disabled || value === '已停用') {
+    return 'muted';
+  }
+
+  if (record.status === 'running' || value === '运行中') {
+    return 'running';
+  }
+
+  if (record.status === 'failed' || /^退出码\s+\d+/u.test(String(value || ''))) {
+    return 'error';
+  }
+
+  if (value === '成功') {
+    return 'success';
+  }
+
+  if (record.status === 'loaded' || value === '已加载') {
+    return 'processing';
+  }
+
+  return 'muted';
+}
+
+/**
+ * 渲染带颜色提示的最近结果。
+ */
+function renderResultText(value, record) {
+  const content = value || '暂无结果';
+  const tone = resolveResultTone(record, content);
+
+  return (
+    <Tooltip title={content}>
+      <span className={`result-indicator result-indicator--${tone}`}>
+        <span className="result-indicator-dot" />
+        <Text className="result-indicator-text">{content}</Text>
+      </span>
+    </Tooltip>
+  );
+}
+
+/**
  * 渲染任务表格。
  */
 function TasksTable({
@@ -176,7 +220,7 @@ function TasksTable({
         dataIndex: 'result',
         key: 'result',
         width: 170,
-        render: (value) => renderEllipsisText(value || '暂无结果'),
+        render: (value, record) => renderResultText(value, record),
       },
       {
         title: '操作',

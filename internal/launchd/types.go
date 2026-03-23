@@ -232,6 +232,19 @@ type ReadServiceLogsResponse struct {
 	Paths     []string      `json:"paths"`
 }
 
+// ClearServiceLogsRequest 表示日志清空请求。
+type ClearServiceLogsRequest struct {
+	ID     string `json:"id"`
+	Stream string `json:"stream"`
+}
+
+// ClearServiceLogsResponse 表示日志清空结果。
+type ClearServiceLogsResponse struct {
+	ServiceID    string   `json:"serviceId"`
+	Stream       string   `json:"stream"`
+	ClearedPaths []string `json:"clearedPaths"`
+}
+
 // LogLine 表示日志行。
 type LogLine struct {
 	Source string `json:"source"`

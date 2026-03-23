@@ -24,6 +24,9 @@ var (
 	servicesLinePattern = regexp.MustCompile(`^\s*(\d+)\s+(-?\d+|-)\s+(.+)$`)
 	disabledLinePattern = regexp.MustCompile(`^\s*"([^"]+)"\s+=>\s+(enabled|disabled)$`)
 	logFileStemPattern  = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+	ansiCsiPattern      = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+	ansiOscPattern      = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
+	ansiEscapePattern   = regexp.MustCompile(`\x1b[@-_]`)
 )
 
 // commandRunner 抽象命令执行，便于测试替换。
@@ -480,6 +483,55 @@ func (s *Service) ReadServiceLogs(ctx context.Context, req ReadServiceLogsReques
 		if warning != "" {
 			response.Warnings = append(response.Warnings, DetailAlert{Type: "warning", Message: warning})
 		}
+	}
+
+	return response, nil
+}
+
+// ClearServiceLogs 清空指定任务当前流对应的日志文件。
+func (s *Service) ClearServiceLogs(ctx context.Context, req ClearServiceLogsRequest) (ClearServiceLogsResponse, error) {
+	_, records, err := s.loadSnapshotWithRecords(ctx, false)
+	if err != nil {
+		return ClearServiceLogsResponse{}, err
+	}
+
+	record, err := findRecord(records, req.ID)
+	if err != nil {
+		return ClearServiceLogsResponse{}, err
+	}
+
+	// 系统级任务保持只读，避免误清理无权管理的日志。
+	if record.readOnly {
+		return ClearServiceLogsResponse{}, errors.New("当前任务为只读范围，不能清空日志")
+	}
+
+	stream := strings.TrimSpace(req.Stream)
+	if stream == "" {
+		stream = "stderr"
+	}
+
+	stdoutPath := readString(record.plistData["StandardOutPath"])
+	stderrPath := readString(record.plistData["StandardErrorPath"])
+	response := ClearServiceLogsResponse{
+		ServiceID: record.path,
+		Stream:    stream,
+	}
+
+	switch stream {
+	case "stdout":
+		response.ClearedPaths = compactStrings([]string{stdoutPath})
+	case "combined":
+		response.ClearedPaths = compactStrings([]string{stdoutPath, stderrPath})
+	default:
+		response.ClearedPaths = compactStrings([]string{stderrPath})
+	}
+
+	if len(response.ClearedPaths) == 0 {
+		return ClearServiceLogsResponse{}, errors.New("当前日志流未配置可清空的日志文件")
+	}
+
+	if err := truncateLogFiles(response.ClearedPaths); err != nil {
+		return ClearServiceLogsResponse{}, err
 	}
 
 	return response, nil
@@ -1586,10 +1638,14 @@ func readLogFile(path string, source string, limit int) ([]LogLine, string) {
 	rawLines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
 	filtered := make([]string, 0, len(rawLines))
 	for _, line := range rawLines {
-		if strings.TrimSpace(line) == "" {
+		sanitizedLine := sanitizeLogLine(line)
+
+		// 清洗后为空的行通常只包含控制序列，没有展示价值。
+		if strings.TrimSpace(sanitizedLine) == "" {
 			continue
 		}
-		filtered = append(filtered, line)
+
+		filtered = append(filtered, sanitizedLine)
 	}
 
 	if len(filtered) > limit {
@@ -1605,6 +1661,44 @@ func readLogFile(path string, source string, limit int) ([]LogLine, string) {
 	}
 
 	return lines, ""
+}
+
+// sanitizeLogLine 清理日志中的 ANSI 控制序列与不可见控制字符。
+func sanitizeLogLine(line string) string {
+	cleaned := ansiOscPattern.ReplaceAllString(line, "")
+	cleaned = ansiCsiPattern.ReplaceAllString(cleaned, "")
+	cleaned = ansiEscapePattern.ReplaceAllString(cleaned, "")
+
+	return strings.Map(func(r rune) rune {
+		// 制表符需要保留，避免多列日志被压平。
+		if r == '\t' {
+			return r
+		}
+
+		// 其余控制字符直接移除，避免前端显示乱码占位符。
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+
+		return r
+	}, cleaned)
+}
+
+// truncateLogFiles 截断指定日志文件，保留文件本身与权限。
+func truncateLogFiles(paths []string) error {
+	for _, path := range compactStrings(paths) {
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+		if err != nil {
+			return fmt.Errorf("清空日志失败: %w", err)
+		}
+
+		// 文件句柄必须及时关闭，避免后续读取仍占用旧状态。
+		if closeErr := file.Close(); closeErr != nil {
+			return fmt.Errorf("关闭日志文件失败: %w", closeErr)
+		}
+	}
+
+	return nil
 }
 
 // decodeAnyMap 将任意 plist 内容解析为 map。

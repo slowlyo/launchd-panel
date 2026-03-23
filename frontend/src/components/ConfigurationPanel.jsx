@@ -305,6 +305,48 @@ function replaceLogFileName(path, stem, stream) {
 }
 
 /**
+ * 选择可复用的日志目录基准路径。
+ */
+function pickLogSeedPath(values = {}, stream, fallbackPaths = {}) {
+  const currentPath = String((stream === 'stdout' ? values.standardOutPath : values.standardErrorPath) || '').trim();
+  const siblingPath = String((stream === 'stdout' ? values.standardErrorPath : values.standardOutPath) || '').trim();
+  const fallbackPath = String((stream === 'stdout' ? fallbackPaths.stdout : fallbackPaths.stderr) || '').trim();
+  const fallbackSiblingPath = String((stream === 'stdout' ? fallbackPaths.stderr : fallbackPaths.stdout) || '').trim();
+
+  return currentPath || siblingPath || fallbackPath || fallbackSiblingPath;
+}
+
+/**
+ * 根据当前任务标识生成日志路径。
+ */
+function buildSuggestedLogPath(values = {}, stream, fallbackPaths = {}) {
+  const seedPath = pickLogSeedPath(values, stream, fallbackPaths);
+
+  // 没有目录基准时不强行拼接，避免生成无效路径。
+  if (!seedPath) {
+    return '';
+  }
+
+  return replaceLogFileName(seedPath, buildSuggestedLogStem(values), stream);
+}
+
+/**
+ * 从当前用户任务 plist 路径推导默认日志目录。
+ */
+function inferLogDirectoryFromServiceId(serviceId = '') {
+  const content = String(serviceId || '').trim();
+  const marker = '/Library/LaunchAgents/';
+  const markerIndex = content.indexOf(marker);
+
+  // 只有当前用户任务能稳定反推出家目录，其他范围保持空值。
+  if (markerIndex <= 0) {
+    return '';
+  }
+
+  return `${content.slice(0, markerIndex)}/Library/Logs/launchd-panel`;
+}
+
+/**
  * 根据用户输入推导内部标识。
  */
 function buildGeneratedIdentity(values = {}) {
@@ -771,6 +813,54 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
     }
   }
 
+  /**
+   * 根据任务标识手动生成日志路径。
+   */
+  function handleGenerateLogPath(fieldName, stream) {
+    const values = form.getFieldsValue(true);
+    const inferredLogDirectory = inferLogDirectoryFromServiceId(editor?.serviceId);
+    const nextPath = buildSuggestedLogPath(values, stream, {
+      stdout: autoLogPathsRef.current.stdout || editor?.form?.standardOutPath || (inferredLogDirectory ? `${inferredLogDirectory}/task.stdout.log` : ''),
+      stderr: autoLogPathsRef.current.stderr || editor?.form?.standardErrorPath || (inferredLogDirectory ? `${inferredLogDirectory}/task.stderr.log` : ''),
+    });
+
+    // 仍然拿不到目录时再提示用户，避免旧任务无日志配置时无法生成。
+    if (!nextPath) {
+      message.warning('当前无法推断日志目录，请先手填一条日志路径。');
+      return;
+    }
+
+    form.setFieldsValue({ [fieldName]: nextPath });
+
+    // 用户主动采用建议值后，恢复该字段的自动托管。
+    if (stream === 'stdout') {
+      autoManagedRef.current.stdout = true;
+      autoLogPathsRef.current.stdout = nextPath;
+      return;
+    }
+
+    autoManagedRef.current.stderr = true;
+    autoLogPathsRef.current.stderr = nextPath;
+  }
+
+  /**
+   * 渲染带生成按钮的日志路径字段。
+   */
+  function renderLogPathField({ label, name, stream, extra, placeholder }) {
+    return (
+      <Form.Item label={label} extra={extra}>
+        <Space.Compact block>
+          <Form.Item name={name} noStyle>
+            <Input placeholder={placeholder} />
+          </Form.Item>
+          <Button type="default" onClick={() => handleGenerateLogPath(name, stream)}>
+            按标识生成
+          </Button>
+        </Space.Compact>
+      </Form.Item>
+    );
+  }
+
   const issueSummary = useMemo(() => {
     if (validation.length === 0) {
       return '当前未发现额外校验问题。';
@@ -920,23 +1010,23 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
               label: '可选高级项',
               children: (
                 <Row gutter={[16, 0]}>
-                  <Col xs={24} md={12}>
-                    <Form.Item
-                      label="输出日志路径"
-                      name="standardOutPath"
-                      extra="填写后，便于在日志抽屉直接查看执行输出。"
-                    >
-                      <Input placeholder="/Users/me/Library/Logs/task.out.log" />
-                    </Form.Item>
+                  <Col xs={24}>
+                    {renderLogPathField({
+                      label: '输出日志路径',
+                      name: 'standardOutPath',
+                      stream: 'stdout',
+                      extra: '填写后，便于在日志抽屉直接查看执行输出。',
+                      placeholder: '/Users/me/Library/Logs/task.out.log',
+                    })}
                   </Col>
-                  <Col xs={24} md={12}>
-                    <Form.Item
-                      label="错误日志路径"
-                      name="standardErrorPath"
-                      extra="没有单独错误日志时，也可以和输出日志写成同一路径。"
-                    >
-                      <Input placeholder="/Users/me/Library/Logs/task.err.log" />
-                    </Form.Item>
+                  <Col xs={24}>
+                    {renderLogPathField({
+                      label: '错误日志路径',
+                      name: 'standardErrorPath',
+                      stream: 'stderr',
+                      extra: '没有单独错误日志时，也可以和输出日志写成同一路径。',
+                      placeholder: '/Users/me/Library/Logs/task.err.log',
+                    })}
                   </Col>
                   <Col xs={24}>
                     <Form.Item label="环境变量" name="environmentVariablesText" extra="每行一个 KEY=value。">
@@ -1085,15 +1175,21 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
                 <Paragraph type="secondary">日志路径能直接影响日志抽屉可读性，建议尽量配置。</Paragraph>
               </div>
               <Row gutter={[16, 0]}>
-                <Col xs={24} md={12}>
-                  <Form.Item label={renderFieldLabel('StandardOutPath', PROFESSIONAL_FIELD_HELP.standardOutPath)} name="standardOutPath">
-                    <Input placeholder="/Users/me/Library/Logs/task.out.log" />
-                  </Form.Item>
+                <Col xs={24}>
+                  {renderLogPathField({
+                    label: renderFieldLabel('StandardOutPath', PROFESSIONAL_FIELD_HELP.standardOutPath),
+                    name: 'standardOutPath',
+                    stream: 'stdout',
+                    placeholder: '/Users/me/Library/Logs/task.out.log',
+                  })}
                 </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item label={renderFieldLabel('StandardErrorPath', PROFESSIONAL_FIELD_HELP.standardErrorPath)} name="standardErrorPath">
-                    <Input placeholder="/Users/me/Library/Logs/task.err.log" />
-                  </Form.Item>
+                <Col xs={24}>
+                  {renderLogPathField({
+                    label: renderFieldLabel('StandardErrorPath', PROFESSIONAL_FIELD_HELP.standardErrorPath),
+                    name: 'standardErrorPath',
+                    stream: 'stderr',
+                    placeholder: '/Users/me/Library/Logs/task.err.log',
+                  })}
                 </Col>
                 <Col xs={24}>
                   <Form.Item
