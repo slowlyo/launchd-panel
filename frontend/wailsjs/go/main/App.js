@@ -6,6 +6,10 @@ export function BatchExecute(arg1) {
   return window['go']['main']['App']['BatchExecute'](arg1);
 }
 
+export function CheckForUpdates() {
+  return window['go']['main']['App']['CheckForUpdates']();
+}
+
 export function ClearServiceLogs(arg1) {
   return window['go']['main']['App']['ClearServiceLogs'](arg1);
 }
@@ -26,12 +30,24 @@ export function GetThemeMode() {
   return window['go']['main']['App']['GetThemeMode']();
 }
 
+export function GetUpdateStatus() {
+  return window['go']['main']['App']['GetUpdateStatus']();
+}
+
 export function GetWorkspaceSnapshot() {
   return window['go']['main']['App']['GetWorkspaceSnapshot']();
 }
 
+export function InstallPreparedUpdate() {
+  return window['go']['main']['App']['InstallPreparedUpdate']();
+}
+
 export function ListServiceHistory(arg1) {
   return window['go']['main']['App']['ListServiceHistory'](arg1);
+}
+
+export function PrepareUpdate() {
+  return window['go']['main']['App']['PrepareUpdate']();
 }
 
 export function ReadServiceLogs(arg1) {

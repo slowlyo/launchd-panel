@@ -69,8 +69,8 @@ function LogHistoryPanel({ task, onClose }) {
   const [logs, setLogs] = useState(null);
   const [history, setHistory] = useState([]);
   const [lineLimit, setLineLimit] = useState(200);
-  const [isAutoRefresh, setIsAutoRefresh] = useState(false);
-  const [isLiveTracking, setIsLiveTracking] = useState(false);
+  const [isAutoRefresh, setIsAutoRefresh] = useState(true);
+  const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(3000);
   const [logsLoading, setLogsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);

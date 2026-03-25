@@ -339,6 +339,67 @@
     white-space: nowrap;
   }
 
+  .toolbar-update-reminder.ant-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    max-width: 220px;
+    height: auto;
+    padding: 8px 12px;
+    border-radius: 16px;
+    background: rgba(22, 119, 255, 0.06);
+    border-color: rgba(22, 119, 255, 0.16) !important;
+  }
+
+  .toolbar-update-reminder.ant-btn:hover,
+  .toolbar-update-reminder.ant-btn:focus,
+  .toolbar-update-reminder.ant-btn:focus-visible {
+    background: rgba(22, 119, 255, 0.1) !important;
+    border-color: rgba(22, 119, 255, 0.24) !important;
+  }
+
+  .toolbar-update-reminder.ant-btn .anticon {
+    margin-inline-end: 0;
+    color: #1677ff;
+    font-size: 14px;
+    flex: 0 0 auto;
+  }
+
+  .toolbar-update-reminder-ready.ant-btn {
+    background: rgba(22, 119, 255, 0.1);
+  }
+
+  .toolbar-update-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    text-align: left;
+    line-height: 1.2;
+  }
+
+  .toolbar-update-title,
+  .toolbar-update-meta {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .toolbar-update-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .toolbar-update-meta {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
   .toolbar-meta-button.ant-btn {
     max-width: 180px;
   }
@@ -1462,6 +1523,20 @@
     flex: 0 0 auto;
   }
 
+  .editor-card .ant-segmented {
+    border-radius: 16px !important;
+  }
+
+  .editor-card .ant-segmented .ant-segmented-item,
+  .editor-card .ant-segmented .ant-segmented-thumb {
+    border-radius: 12px !important;
+  }
+
+  .editor-card .ant-segmented .ant-segmented-thumb {
+    background: var(--panel-bg) !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  }
+
   .config-editor-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
@@ -1543,7 +1618,11 @@
   }
 
   .guide-segmented .ant-segmented-item {
-    border-radius: 10px;
+    border-radius: 12px;
+  }
+
+  .guide-segmented .ant-segmented-thumb {
+    border-radius: 12px !important;
   }
 
   .guide-segmented .ant-segmented-item-label {
@@ -1933,6 +2012,11 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
   }
 
+  .settings-item-stacked {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .settings-item-copy {
     min-width: 0;
   }
@@ -1956,6 +2040,12 @@
     border-radius: 999px;
   }
 
+  .settings-tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
   .settings-item-control {
     flex: 0 0 auto;
   }
@@ -1974,6 +2064,30 @@
     min-height: 34px;
     padding-inline: 14px;
     line-height: 34px;
+  }
+
+  .settings-update-note.ant-typography {
+    margin-top: 12px;
+  }
+
+  .settings-update-meta.ant-typography {
+    margin-top: 6px;
+    margin-bottom: 0 !important;
+  }
+
+  .settings-progress-block {
+    margin-top: 14px;
+  }
+
+  .settings-progress-copy {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-subtle);
+  }
+
+  .settings-actions {
+    display: flex;
+    justify-content: flex-end;
   }
 
   :root[data-theme='dark'] .nav-group {
@@ -2128,8 +2242,19 @@
       min-width: 100%;
     }
 
+    .header-actions {
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap !important;
+      overflow: visible;
+    }
+
     .global-search-shell {
       @apply max-w-none;
+    }
+
+    .toolbar-update-reminder.ant-btn {
+      max-width: 100%;
     }
 
     .settings-item {

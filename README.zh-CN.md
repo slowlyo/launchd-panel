@@ -66,6 +66,8 @@
   - 麻瓜模式
   - 专业表单
   - 原始 plist
+- 麻瓜模式将固定间隔、每天、每周、每月统一归为“定时执行”，其中固定间隔支持秒、分钟、小时、天
+- 专业表单为常见 `StartCalendarInterval` 提供可视化编辑，可直接配置“每周五 17:50”
 - 支持结构化字段维护
   - `Label`
   - `Program`
@@ -108,6 +110,8 @@
   - 暗色
   - 跟随系统
 - 支持记住“是否展示系统任务”
+- 支持启动时检查 GitHub 最新版
+- 支持后台预下载更新包，并在重启后自动替换安装
 - 设置保存在本机配置目录
 
 ## 管理范围
@@ -161,6 +165,8 @@ launchd-panel/
 │       ├── service.go
 │       ├── service_test.go
 │       └── types.go
+├── scripts/
+│   └── sync-version.mjs
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.js
@@ -235,9 +241,11 @@ wails build
 
 流水线会完成以下动作：
 
-- 执行 `wails build -clean -platform darwin/universal`
+- 将 tag 版本号同步到 `wails.json` 和 `version.go`
+- 执行 `wails build -clean -platform darwin/universal -ldflags "-X main.appVersion=${VERSION}"`
 - 将 `build/bin/launchd-panel.app` 重命名为 `Launchd Panel.app` 后打包为 zip
 - 自动创建 GitHub Release，并上传 zip 与 SHA-256 校验文件
+- 自动把版本文件回写到默认分支
 
 ## 说明
 

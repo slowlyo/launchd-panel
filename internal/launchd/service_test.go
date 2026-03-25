@@ -311,3 +311,35 @@ func TestExecuteStartReturnsDetailedBootstrapError(t *testing.T) {
 		t.Fatalf("expected original bootstrap detail, got %q", message)
 	}
 }
+
+// TestExecuteStopUsesBootout 确保停止动作会卸载任务，避免被 launchd 立即拉起。
+func TestExecuteStopUsesBootout(t *testing.T) {
+	runner := &fakeRunner{}
+	service := &Service{
+		runner: runner,
+	}
+	record := &serviceRecord{
+		path:   "/tmp/demo.plist",
+		label:  "com.example.demo",
+		domain: "gui/501",
+		loaded: true,
+	}
+
+	success, message, err := service.executeStop(context.Background(), record)
+
+	if err != nil {
+		t.Fatalf("expected stop to succeed, got %v", err)
+	}
+	if !success {
+		t.Fatalf("expected stop to succeed")
+	}
+	if message != "任务已停止" {
+		t.Fatalf("unexpected stop message: %q", message)
+	}
+	if len(runner.calls) != 1 {
+		t.Fatalf("expected 1 launchctl call, got %d", len(runner.calls))
+	}
+	if runner.calls[0] != "launchctl bootout gui/501 /tmp/demo.plist" {
+		t.Fatalf("unexpected launchctl call: %q", runner.calls[0])
+	}
+}

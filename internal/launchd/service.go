@@ -391,7 +391,7 @@ func (s *Service) ExecuteServiceAction(ctx context.Context, req ExecuteServiceAc
 	case ActionStart:
 		success, message, err = s.executeStart(ctx, record)
 	case ActionStop:
-		success, message, err = s.executeManagedAction(ctx, record, []string{"kill", "SIGTERM", serviceTarget(record.domain, record.label)}, "停止信号已发送")
+		success, message, err = s.executeStop(ctx, record)
 	case ActionEnable:
 		success, message, err = s.executeManagedAction(ctx, record, []string{"enable", serviceTarget(record.domain, record.label)}, "任务已启用")
 	case ActionDisable:
@@ -644,6 +644,16 @@ func (s *Service) executeStart(ctx context.Context, record *serviceRecord) (bool
 	}
 
 	return s.executeManagedAction(ctx, record, []string{"kickstart", "-kp", serviceTarget(record.domain, record.label)}, "任务已启动")
+}
+
+// executeStop 停止并卸载当前用户任务，避免 launchd 继续拉起进程。
+func (s *Service) executeStop(ctx context.Context, record *serviceRecord) (bool, string, error) {
+	// 未加载任务无需重复停止，直接返回当前状态。
+	if !record.loaded {
+		return true, "任务当前未加载", nil
+	}
+
+	return s.executeManagedAction(ctx, record, []string{"bootout", record.domain, record.path}, "任务已停止")
 }
 
 // executeReload 按路径执行 bootout + bootstrap。

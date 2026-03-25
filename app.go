@@ -10,6 +10,7 @@ import (
 type App struct {
 	ctx     context.Context
 	service *launchd.Service
+	updater *Updater
 }
 
 // NewApp 创建应用实例并初始化 launchd 服务。
@@ -21,6 +22,7 @@ func NewApp() *App {
 
 	return &App{
 		service: service,
+		updater: NewUpdater(appVersion),
 	}
 }
 
@@ -37,6 +39,26 @@ func (a *App) GetThemeMode() string {
 // SaveThemeMode 保存当前主题模式，供下次启动时恢复窗口外观。
 func (a *App) SaveThemeMode(themeMode string) error {
 	return savePersistedThemeMode(themeMode)
+}
+
+// GetUpdateStatus 返回当前缓存的更新状态。
+func (a *App) GetUpdateStatus() (UpdateStatus, error) {
+	return a.updater.GetStatus()
+}
+
+// CheckForUpdates 主动检查 GitHub 最新正式版。
+func (a *App) CheckForUpdates() (UpdateStatus, error) {
+	return a.updater.CheckForUpdates(a.requestContext())
+}
+
+// PrepareUpdate 下载并准备安装更新包。
+func (a *App) PrepareUpdate() (UpdateStatus, error) {
+	return a.updater.PrepareUpdate(a.requestContext())
+}
+
+// InstallPreparedUpdate 退出应用并安装已下载的新版本。
+func (a *App) InstallPreparedUpdate() error {
+	return a.updater.InstallPreparedUpdate(a.requestContext())
 }
 
 // GetWorkspaceSnapshot 返回工作区首页数据。

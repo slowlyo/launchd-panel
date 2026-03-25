@@ -156,6 +156,7 @@ function TasksTable({
   batchDisableReason,
   selectedNavLabel,
   searchKeyword,
+  pendingTaskAction,
 }) {
   const chips = useMemo(() => buildChipItems(selectedNavLabel, searchKeyword, selectedRowKeys.length), [
     searchKeyword,
@@ -232,7 +233,9 @@ function TasksTable({
             trigger={['click']}
             overlayClassName="task-actions-dropdown"
             menu={{
-              items: buildTaskMenuItems(record),
+              items: buildTaskMenuItems(record, {
+                pendingAction: pendingTaskAction?.taskId === record.id ? pendingTaskAction.action : '',
+              }),
               onClick: ({ key, domEvent }) => {
                 // 下拉菜单点击不能冒泡到整行详情打开。
                 domEvent.stopPropagation();
@@ -260,6 +263,7 @@ function TasksTable({
               type="text"
               icon={<MoreOutlined />}
               aria-label="更多操作"
+              loading={pendingTaskAction?.taskId === record.id}
               onClick={(event) => {
                 // 操作按钮只打开菜单，不触发行点击。
                 event.stopPropagation();
@@ -269,7 +273,7 @@ function TasksTable({
         ),
       },
     ],
-    [onExecuteTaskAction, onOpenDetail, onOpenEditConfig, onOpenLogs]
+    [onExecuteTaskAction, onOpenDetail, onOpenEditConfig, onOpenLogs, pendingTaskAction]
   );
 
   return (

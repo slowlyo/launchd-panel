@@ -35,6 +35,24 @@ launchd-panel/
 │   └── workflows/
 │       └── release.yml
 ├── app.go
+├── build/
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── style.css
+│   │   └── components/
+│   │       ├── ConfigurationPanel.jsx
+│   │       ├── DetailPanel.jsx
+│   │       ├── LogHistoryPanel.jsx
+│   │       ├── Navigation.jsx
+│   │       ├── PlistEditor.jsx
+│   │       ├── ScrollArea.jsx
+│   │       ├── StatusTag.jsx
+│   │       ├── SummarySection.jsx
+│   │       ├── TasksTable.jsx
+│   └── wailsjs/
 ├── internal/
 │   └── launchd/
 │       ├── history.go
@@ -42,27 +60,12 @@ launchd-panel/
 │       ├── service_test.go
 │       └── types.go
 ├── main.go
+├── scripts/
+│   └── sync-version.mjs
 ├── go.mod
 ├── README.md
 ├── wails.json
-├── build/
-└── frontend/
-    ├── package.json
-    ├── vite.config.js
-    ├── src/
-    │   ├── App.jsx
-    │   ├── style.css
-    │   └── components/
-    │       ├── ConfigurationPanel.jsx
-    │       ├── DetailPanel.jsx
-    │       ├── LogHistoryPanel.jsx
-    │       ├── Navigation.jsx
-    │       ├── PlistEditor.jsx
-    │       ├── ScrollArea.jsx
-    │       ├── StatusTag.jsx
-    │       ├── SummarySection.jsx
-    │       ├── TasksTable.jsx
-    └── wailsjs/
+└── version.go
 ```
 
 ## 后端架构约定
@@ -100,7 +103,9 @@ launchd-panel/
 - 任务列表单击默认打开详情抽屉，右键通过上下文菜单选择详情、编辑或日志
 - 表格提供显式“操作”列下拉菜单，方便新用户发现详情、编辑与日志入口
 - 选中任务后的详情、编辑、日志均通过右侧抽屉承载，避免挤压任务列表
-- 配置抽屉提供“麻瓜模式 / 专业表单 / 原始 plist”三种维护入口
+- 配置抽屉提供“表单 / 原始 plist”两种维护入口
+- 表单模式默认展示高频字段，低频项收纳到高级设置
+- 设置抽屉负责主题、任务可见范围与应用更新检查/升级入口
 
 ### 组件拆分
 界面按职责拆分为以下子组件：
@@ -120,6 +125,7 @@ launchd-panel/
 约定：
 - 列表、概览、导航计数来自 `GetWorkspaceSnapshot`
 - 详情、编辑、日志、历史按抽屉打开时按需加载
+- 更新检查、更新包准备与安装状态通过 Wails 绑定方法和运行时事件协同驱动
 - 表单模式保存时由后端保留未覆盖的原始 plist 键
 
 ## 设计与交互约定
@@ -184,8 +190,10 @@ launchd-panel/
 
 Tag 发版由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 负责：
 - 推送任意 tag 时自动执行
-- 在 macOS runner 上执行 `wails build -clean -platform darwin/universal`
+- 先把 tag 版本号同步到 `wails.json` 与 [`version.go`](version.go)
+- 在 macOS runner 上执行 `wails build -clean -platform darwin/universal -ldflags "-X main.appVersion=${VERSION}"`
 - 自动创建 GitHub Release，并上传 zip 与 SHA-256 校验文件
+- 发版完成后自动把版本文件回写到默认分支
 
 当前已知情况：
 - 构建可通过

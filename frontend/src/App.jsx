@@ -1,4 +1,5 @@
 import {
+  Modal,
   Button,
   Card,
   ConfigProvider,
@@ -19,6 +20,7 @@ import {
   AppstoreOutlined,
   BarsOutlined,
   CodeOutlined,
+  CloudDownloadOutlined,
   DatabaseOutlined,
   DesktopOutlined,
   EyeOutlined,
@@ -30,19 +32,25 @@ import {
   PlusOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
+  RocketOutlined,
   SafetyCertificateOutlined,
   SearchOutlined,
   SettingOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BatchExecute,
+  CheckForUpdates,
   ExecuteServiceAction,
   GetThemeMode,
+  GetUpdateStatus,
   GetWorkspaceSnapshot,
+  InstallPreparedUpdate,
+  PrepareUpdate,
   SaveThemeMode,
 } from '../wailsjs/go/main/App';
+import { BrowserOpenURL, EventsOn } from '../wailsjs/runtime/runtime';
 import ConfigurationPanel from './components/ConfigurationPanel';
 import DetailPanel from './components/DetailPanel';
 import LogHistoryPanel from './components/LogHistoryPanel';
@@ -59,10 +67,42 @@ const CONTEXT_MENU_WIDTH = 188;
 const CONTEXT_MENU_OFFSET = 12;
 const CONTEXT_MENU_HEIGHT = 288;
 const APP_SETTINGS_STORAGE_KEY = 'launchd-panel:app-settings';
+const UPDATE_PROGRESS_EVENT_NAME = 'app:update-progress';
 const THEME_MODE_OPTIONS = new Set(['light', 'dark', 'system']);
 const DEFAULT_APP_SETTINGS = {
   showSystemTasks: false,
   themeMode: 'system',
+  autoCheckUpdates: true,
+  autoDownloadUpdates: false,
+};
+const DEFAULT_UPDATE_STATUS = {
+  currentVersion: '0.0.0-dev',
+  currentVersionLabel: 'v0.0.0-dev',
+  latestVersion: '',
+  latestVersionLabel: '',
+  latestTag: '',
+  releaseUrl: '',
+  publishedAt: '',
+  assetName: '',
+  assetSize: 0,
+  hasUpdate: false,
+  readyToInstall: false,
+  updateSupported: true,
+  status: 'idle',
+  message: '尚未检查更新',
+  lastCheckedAt: '',
+  downloadedAt: '',
+};
+const DEFAULT_UPDATE_PROGRESS = {
+  stage: 'idle',
+  message: '',
+  percent: 0,
+  downloaded: 0,
+  total: 0,
+};
+const EMPTY_TASK_ACTION_STATE = {
+  taskId: '',
+  action: '',
 };
 const SYSTEM_SCOPE_KEYS = new Set(['all-agent', 'system-agent', 'daemon']);
 const TASK_STATUS_PRIORITY = {
@@ -148,6 +188,8 @@ function readAppSettings() {
       ...DEFAULT_APP_SETTINGS,
       showSystemTasks: Boolean(parsedValue?.showSystemTasks),
       themeMode: normalizeThemeMode(parsedValue?.themeMode),
+      autoCheckUpdates: parsedValue?.autoCheckUpdates ?? DEFAULT_APP_SETTINGS.autoCheckUpdates,
+      autoDownloadUpdates: Boolean(parsedValue?.autoDownloadUpdates),
     };
   } catch (error) {
     return { ...DEFAULT_APP_SETTINGS };
@@ -167,6 +209,48 @@ function writeAppSettings(settings) {
   } catch (error) {
     // 本地存储失败不影响主流程，直接忽略即可。
   }
+}
+
+/**
+ * 归一化后端返回的更新状态对象。
+ */
+function normalizeUpdateStatus(status) {
+  return {
+    ...DEFAULT_UPDATE_STATUS,
+    ...status,
+    hasUpdate: Boolean(status?.hasUpdate),
+    readyToInstall: Boolean(status?.readyToInstall),
+    updateSupported: status?.updateSupported ?? DEFAULT_UPDATE_STATUS.updateSupported,
+  };
+}
+
+/**
+ * 归一化更新过程进度数据。
+ */
+function normalizeUpdateProgress(progress) {
+  return {
+    ...DEFAULT_UPDATE_PROGRESS,
+    ...progress,
+    percent: Number.isFinite(progress?.percent) ? progress.percent : DEFAULT_UPDATE_PROGRESS.percent,
+    downloaded: Number(progress?.downloaded || 0),
+    total: Number(progress?.total || 0),
+  };
+}
+
+/**
+ * 弹出安装更新确认框。
+ */
+function confirmInstallUpdate() {
+  return new Promise((resolve) => {
+    Modal.confirm({
+      title: '安装新版本',
+      content: '应用会先退出，再用已下载的更新包替换当前版本，完成后自动重新打开。',
+      okText: '继续安装',
+      cancelText: '取消',
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
+    });
+  });
 }
 
 /**
@@ -461,12 +545,39 @@ function buildRefreshLabel(refreshedAt, isRefreshing = false) {
 }
 
 /**
+ * 返回任务动作执行中的提示文案。
+ */
+function buildTaskActionLoadingText(action, task) {
+  const targetName = task?.label ? `「${task.label}」` : '当前任务';
+
+  switch (action) {
+    case 'start':
+      return `正在启动${targetName}`;
+    case 'stop':
+      return `正在终止${targetName}`;
+    case 'reload':
+      return `正在重载${targetName}`;
+    case 'enable':
+      return `正在启用${targetName}`;
+    case 'disable':
+      return `正在停用${targetName}`;
+    case 'validate':
+      return `正在校验${targetName}`;
+    case 'delete':
+      return `正在删除${targetName}`;
+    default:
+      return `正在处理${targetName}`;
+  }
+}
+
+/**
  * 渲染应用主界面。
  */
 function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingTaskAction, setPendingTaskAction] = useState(EMPTY_TASK_ACTION_STATE);
   const [appSettings, setAppSettings] = useState(() => readAppSettings());
   const [systemThemeMode, setSystemThemeMode] = useState(() => getSystemThemeMode());
   const [isThemeModeHydrated, setIsThemeModeHydrated] = useState(false);
@@ -478,6 +589,11 @@ function App() {
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
   const [isLogsDrawerOpen, setIsLogsDrawerOpen] = useState(false);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(() => normalizeUpdateStatus());
+  const [updateProgress, setUpdateProgress] = useState(() => normalizeUpdateProgress());
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isPreparingUpdate, setIsPreparingUpdate] = useState(false);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [configTaskId, setConfigTaskId] = useState('');
   const [contextMenu, setContextMenu] = useState({
     open: false,
@@ -486,6 +602,12 @@ function App() {
     task: null,
   });
   const isMacEnvironment = useMemo(() => isMacOS(), []);
+  const hasTriggeredAutoUpdateCheckRef = useRef(false);
+  const latestAnnouncedVersionRef = useRef('');
+  const shouldShowUpdateReminder = updateStatus.updateSupported && updateStatus.hasUpdate;
+  const isPreparedUpdate = shouldShowUpdateReminder && updateStatus.readyToInstall;
+  const updateReminderLabel = updateStatus.latestVersionLabel || '新版本';
+  const updateReminderDescription = isPreparedUpdate ? '已下载，点此安装' : '点此查看并升级';
 
   /**
    * 拉取工作区快照。
@@ -548,6 +670,31 @@ function App() {
   useEffect(() => {
     loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    /**
+     * 读取当前本地更新状态，保证设置页能立即显示当前版本与已下载状态。
+     */
+    async function loadLocalUpdateStatus() {
+      try {
+        const response = normalizeUpdateStatus(await GetUpdateStatus());
+
+        if (!cancelled) {
+          setUpdateStatus(response);
+        }
+      } catch (error) {
+        // 本地状态读取失败时保持默认值，不阻断主界面加载。
+      }
+    }
+
+    loadLocalUpdateStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /**
    * 触发工具栏手动刷新。
@@ -641,6 +788,21 @@ function App() {
   }, [appSettings]);
 
   useEffect(() => {
+    /**
+     * 订阅后端更新进度事件，驱动设置页中的下载与安装反馈。
+     */
+    const unsubscribe = EventsOn(UPDATE_PROGRESS_EVENT_NAME, (payload) => {
+      setUpdateProgress(normalizeUpdateProgress(payload));
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isThemeModeHydrated) {
       return;
     }
@@ -649,6 +811,141 @@ function App() {
       // 后端持久化失败时不打断当前主题切换。
     });
   }, [appSettings.themeMode, isThemeModeHydrated]);
+
+  /**
+   * 统一提示用户发现了新版本。
+   */
+  const announceUpdateAvailable = useCallback((status, silent = false) => {
+    if (!status.hasUpdate || !status.latestVersion) {
+      return;
+    }
+
+    // 自动检查只在首次发现指定版本时提示一次，避免重复打扰。
+    if (silent) {
+      if (latestAnnouncedVersionRef.current === status.latestVersion) {
+        return;
+      }
+      latestAnnouncedVersionRef.current = status.latestVersion;
+      message.info(`发现新版本 ${status.latestVersionLabel}，可在设置中升级`);
+      return;
+    }
+
+    latestAnnouncedVersionRef.current = status.latestVersion;
+    message.success(`发现新版本 ${status.latestVersionLabel}`);
+  }, []);
+
+  /**
+   * 下载并准备最新更新包。
+   */
+  const handlePrepareUpdate = useCallback(async ({ silent = false } = {}) => {
+    if (isPreparingUpdate || isInstallingUpdate) {
+      return;
+    }
+
+    setIsPreparingUpdate(true);
+    setUpdateProgress(normalizeUpdateProgress({
+      stage: 'downloading',
+      message: '正在下载更新包',
+    }));
+
+    try {
+      const response = normalizeUpdateStatus(await PrepareUpdate());
+      setUpdateStatus(response);
+
+      if (!silent) {
+        message.success(response.readyToInstall ? '更新包已准备完成' : response.message);
+      }
+    } catch (error) {
+      message.error(getErrorMessage(error, '准备更新包失败'));
+    } finally {
+      setIsPreparingUpdate(false);
+    }
+  }, [isInstallingUpdate, isPreparingUpdate]);
+
+  /**
+   * 主动检查最新版本，并按设置决定是否自动预下载。
+   */
+  const handleCheckForUpdates = useCallback(async ({ silent = false, autoPrepare = false } = {}) => {
+    if (isCheckingUpdate || isPreparingUpdate || isInstallingUpdate) {
+      return;
+    }
+
+    setIsCheckingUpdate(true);
+    setUpdateProgress(normalizeUpdateProgress({
+      stage: 'checking',
+      message: '正在检查最新版本',
+    }));
+
+    try {
+      const response = normalizeUpdateStatus(await CheckForUpdates());
+      setUpdateStatus(response);
+
+      if (response.hasUpdate) {
+        announceUpdateAvailable(response, silent);
+
+        // 用户显式开启自动下载时，检查完成后直接准备更新包。
+        if (autoPrepare && response.updateSupported && !response.readyToInstall) {
+          await handlePrepareUpdate({ silent: true });
+        }
+      } else if (!silent) {
+        message.success(response.message);
+      }
+    } catch (error) {
+      message.error(getErrorMessage(error, '检查更新失败'));
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, [announceUpdateAvailable, handlePrepareUpdate, isCheckingUpdate, isInstallingUpdate, isPreparingUpdate]);
+
+  useEffect(() => {
+    if (!appSettings.autoCheckUpdates || hasTriggeredAutoUpdateCheckRef.current) {
+      return;
+    }
+
+    hasTriggeredAutoUpdateCheckRef.current = true;
+    handleCheckForUpdates({
+      silent: true,
+      autoPrepare: appSettings.autoDownloadUpdates,
+    });
+  }, [appSettings.autoCheckUpdates, appSettings.autoDownloadUpdates, handleCheckForUpdates]);
+
+  /**
+   * 打开更新对应的 GitHub 发布页。
+   */
+  const handleOpenReleasePage = useCallback(() => {
+    if (!updateStatus.releaseUrl) {
+      return;
+    }
+
+    BrowserOpenURL(updateStatus.releaseUrl);
+  }, [updateStatus.releaseUrl]);
+
+  /**
+   * 安装已准备完成的更新包。
+   */
+  const handleInstallPreparedUpdate = useCallback(async () => {
+    if (!updateStatus.readyToInstall || isInstallingUpdate) {
+      return;
+    }
+
+    const confirmed = await confirmInstallUpdate();
+    if (!confirmed) {
+      return;
+    }
+
+    setIsInstallingUpdate(true);
+    setUpdateProgress(normalizeUpdateProgress({
+      stage: 'installing',
+      message: '正在准备安装新版本',
+    }));
+
+    try {
+      await InstallPreparedUpdate();
+    } catch (error) {
+      setIsInstallingUpdate(false);
+      message.error(getErrorMessage(error, '启动安装流程失败'));
+    }
+  }, [isInstallingUpdate, updateStatus.readyToInstall]);
 
   useEffect(() => {
     // 菜单打开后监听全局点击与窗口变化，保证及时收起。
@@ -794,7 +1091,18 @@ function App() {
       return;
     }
 
+    const feedbackKey = `task-action:${task.id}`;
+    setPendingTaskAction({
+      taskId: task.id,
+      action,
+    });
     closeContextMenu();
+    message.open({
+      key: feedbackKey,
+      type: 'loading',
+      content: buildTaskActionLoadingText(action, task),
+      duration: 0,
+    });
 
     try {
       const response = await ExecuteServiceAction({ id: task.id, action });
@@ -802,13 +1110,34 @@ function App() {
 
       // 校验发现问题属于预期结果，使用警告反馈更准确。
       if (action === 'validate' && !response.success) {
-        message.warning(response.message || '配置存在问题');
+        message.open({
+          key: feedbackKey,
+          type: 'warning',
+          content: response.message || '配置存在问题',
+        });
         return;
       }
 
-      message.success(response.message || '操作完成');
+      message.open({
+        key: feedbackKey,
+        type: 'success',
+        content: response.message || '操作完成',
+      });
     } catch (error) {
-      message.error(getErrorMessage(error, '执行任务操作失败'));
+      message.open({
+        key: feedbackKey,
+        type: 'error',
+        content: getErrorMessage(error, '执行任务操作失败'),
+      });
+    } finally {
+      setPendingTaskAction((current) => {
+        // 只清理当前完成的动作，避免覆盖新的并发状态。
+        if (current.taskId !== task.id || current.action !== action) {
+          return current;
+        }
+
+        return EMPTY_TASK_ACTION_STATE;
+      });
     }
   }, [closeContextMenu, handleWorkspaceChange]);
 
@@ -1018,6 +1347,8 @@ function App() {
       const normalizedSettings = {
         ...nextSettings,
         themeMode: normalizeThemeMode(nextSettings.themeMode),
+        autoCheckUpdates: nextSettings.autoCheckUpdates ?? DEFAULT_APP_SETTINGS.autoCheckUpdates,
+        autoDownloadUpdates: Boolean(nextSettings.autoDownloadUpdates),
       };
 
       // macOS 原生标题栏只在启动阶段读取外观配置，需要提示用户重启。
@@ -1059,6 +1390,23 @@ function App() {
                 </div>
               </Space>
               <Space wrap className="header-actions">
+                {shouldShowUpdateReminder ? (
+                  <Tooltip title={isPreparedUpdate ? `${updateReminderLabel} 已准备完成` : `发现 ${updateReminderLabel}`}>
+                    <Button
+                      className={`toolbar-button toolbar-update-reminder${isPreparedUpdate ? ' toolbar-update-reminder-ready' : ''}`}
+                      icon={isPreparedUpdate ? <RocketOutlined /> : <CloudDownloadOutlined />}
+                      aria-label={isPreparedUpdate ? `${updateReminderLabel} 已准备完成，点击安装` : `发现 ${updateReminderLabel}，点击查看更新`}
+                      onClick={isPreparedUpdate ? handleInstallPreparedUpdate : () => setIsSettingsDrawerOpen(true)}
+                    >
+                      <span className="toolbar-update-copy">
+                        <span className="toolbar-update-title">
+                          {isPreparedUpdate ? `${updateReminderLabel} 已就绪` : `发现 ${updateReminderLabel}`}
+                        </span>
+                        <span className="toolbar-update-meta">{updateReminderDescription}</span>
+                      </span>
+                    </Button>
+                  </Tooltip>
+                ) : null}
                 <Tooltip title={buildRefreshLabel(snapshot?.refreshedAt, isRefreshing)}>
                   <Button
                     className={`toolbar-button toolbar-icon-button${isRefreshing ? ' toolbar-button-refreshing' : ''}`}
@@ -1128,6 +1476,7 @@ function App() {
                     batchDisableReason={batchDisableReason}
                     selectedNavLabel={selectedNavLabel}
                     searchKeyword={searchKeyword}
+                    pendingTaskAction={pendingTaskAction}
                   />
                 </Space>
               )}
@@ -1147,7 +1496,16 @@ function App() {
         <SettingsPanel
           settings={appSettings}
           resolvedThemeMode={resolvedThemeMode}
+          updateStatus={updateStatus}
+          updateProgress={updateProgress}
+          isCheckingUpdate={isCheckingUpdate}
+          isPreparingUpdate={isPreparingUpdate}
+          isInstallingUpdate={isInstallingUpdate}
           onChange={handleAppSettingsChange}
+          onCheckForUpdates={() => handleCheckForUpdates({ silent: false })}
+          onPrepareUpdate={() => handlePrepareUpdate({ silent: false })}
+          onInstallUpdate={handleInstallPreparedUpdate}
+          onOpenReleasePage={handleOpenReleasePage}
         />
       </Drawer>
 
@@ -1207,7 +1565,9 @@ function App() {
           <Menu
             selectable={false}
             onClick={({ key }) => handleContextMenuAction(key)}
-            items={buildTaskMenuItems(contextMenu.task)}
+            items={buildTaskMenuItems(contextMenu.task, {
+              pendingAction: pendingTaskAction.taskId === contextMenu.task?.id ? pendingTaskAction.action : '',
+            })}
           />
         </div>
       ) : null}

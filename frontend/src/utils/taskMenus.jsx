@@ -3,6 +3,7 @@ import {
   CodeOutlined,
   EyeOutlined,
   FileSearchOutlined,
+  LoadingOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
@@ -57,43 +58,74 @@ function buildQuickAction(task) {
 }
 
 /**
+ * 根据动作执行态修正菜单项展示。
+ */
+function decorateActionItem(item, pendingAction) {
+  if (!item) {
+    return item;
+  }
+
+  // 当前动作执行中时，使用旋转图标强化反馈。
+  if (pendingAction === item.key) {
+    return {
+      ...item,
+      icon: <LoadingOutlined spin />,
+      label: `${item.label}中...`,
+      disabled: true,
+    };
+  }
+
+  // 同一任务已有其他动作执行时，避免用户重复触发。
+  if (pendingAction) {
+    return {
+      ...item,
+      disabled: true,
+    };
+  }
+
+  return item;
+}
+
+/**
  * 统一生成任务列表与右键菜单项。
  */
-export function buildTaskMenuItems(task) {
+export function buildTaskMenuItems(task, options = {}) {
+  const pendingAction = options.pendingAction || '';
   const items = [
     {
       key: 'detail',
       icon: <EyeOutlined />,
       label: '查看详情',
+      disabled: Boolean(pendingAction),
     },
     {
       key: 'edit',
       icon: <CodeOutlined />,
       label: '编辑配置',
-      disabled: !task?.capabilities?.canEdit,
+      disabled: Boolean(pendingAction) || !task?.capabilities?.canEdit,
     },
     {
       key: 'logs',
       icon: <FileSearchOutlined />,
       label: '查看日志',
-      disabled: !task?.capabilities?.canReadLogs,
+      disabled: Boolean(pendingAction) || !task?.capabilities?.canReadLogs,
     },
   ];
 
-  const quickAction = buildQuickAction(task);
+  const quickAction = decorateActionItem(buildQuickAction(task), pendingAction);
   const actionItems = [
-    {
+    decorateActionItem({
       key: 'validate',
       icon: <SafetyCertificateOutlined />,
       label: '校验配置',
-    },
+    }, pendingAction),
     quickAction,
     task?.capabilities?.canReload
-      ? {
+      ? decorateActionItem({
           key: 'reload',
           icon: <ReloadOutlined />,
           label: '重载任务',
-        }
+        }, pendingAction)
       : null,
   ].filter(Boolean);
 

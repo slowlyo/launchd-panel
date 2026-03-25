@@ -66,6 +66,8 @@ It is built with Wails, uses Go for `launchctl`, plist, and log handling, and us
   - guided mode
   - professional form
   - raw plist
+- Guided mode groups interval, daily, weekly, and monthly schedules under one `timed` entry, and interval rules support seconds, minutes, hours, and days
+- The professional form includes a visual `StartCalendarInterval` editor for common rules like `every Friday at 17:50`
 - Structured editing is supported for
   - `Label`
   - `Program`
@@ -108,6 +110,8 @@ It is built with Wails, uses Go for `launchctl`, plist, and log handling, and us
   - dark
   - follow system
 - Remembers whether system jobs should be shown
+- Can check the latest GitHub release on startup
+- Can pre-download an update package and install it after restart
 - Settings are persisted in the local config directory
 
 ## Management Scope
@@ -161,6 +165,8 @@ launchd-panel/
 │       ├── service.go
 │       ├── service_test.go
 │       └── types.go
+├── scripts/
+│   └── sync-version.mjs
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.js
@@ -235,9 +241,11 @@ Push any tag, for example `v0.1.0`, to trigger GitHub Actions.
 
 The workflow will:
 
-- build the macOS app with `wails build -clean -platform darwin/universal`
+- sync the tag version into `wails.json` and `version.go`
+- build the macOS app with `wails build -clean -platform darwin/universal -ldflags "-X main.appVersion=${VERSION}"`
 - repackage `build/bin/launchd-panel.app` as `Launchd Panel.app` inside the zip archive
 - publish a GitHub Release and upload the zip plus SHA-256 checksum
+- push the updated version files back to the default branch automatically
 
 ## Notes
 

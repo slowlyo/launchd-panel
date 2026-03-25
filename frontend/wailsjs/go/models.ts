@@ -866,3 +866,50 @@ export namespace launchd {
 
 }
 
+export namespace main {
+	
+	export class UpdateStatus {
+	    currentVersion: string;
+	    currentVersionLabel: string;
+	    latestVersion: string;
+	    latestVersionLabel: string;
+	    latestTag: string;
+	    releaseUrl: string;
+	    publishedAt: string;
+	    assetName: string;
+	    assetSize: number;
+	    hasUpdate: boolean;
+	    readyToInstall: boolean;
+	    updateSupported: boolean;
+	    status: string;
+	    message: string;
+	    lastCheckedAt: string;
+	    downloadedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.currentVersionLabel = source["currentVersionLabel"];
+	        this.latestVersion = source["latestVersion"];
+	        this.latestVersionLabel = source["latestVersionLabel"];
+	        this.latestTag = source["latestTag"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.publishedAt = source["publishedAt"];
+	        this.assetName = source["assetName"];
+	        this.assetSize = source["assetSize"];
+	        this.hasUpdate = source["hasUpdate"];
+	        this.readyToInstall = source["readyToInstall"];
+	        this.updateSupported = source["updateSupported"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.lastCheckedAt = source["lastCheckedAt"];
+	        this.downloadedAt = source["downloadedAt"];
+	    }
+	}
+
+}
+

@@ -11,14 +11,13 @@ import {
   List,
   Row,
   Segmented,
+  Select,
   Space,
   Switch,
   Tag,
-  Tooltip,
   Typography,
   message,
 } from 'antd';
-import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GetServiceEditor, SaveServiceConfig, ValidateServiceConfig } from '../../wailsjs/go/main/App';
 import PlistEditor from './PlistEditor';
@@ -26,10 +25,15 @@ import { getErrorMessage } from '../utils/errors';
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
-const PANEL_MODES = ['麻瓜模式', '专业表单', '原始 plist'];
+const FORM_MODE = '表单';
+const RAW_MODE = '原始 plist';
+const PANEL_MODES = [FORM_MODE, RAW_MODE];
 const DEFAULT_INTERVAL_MINUTES = 15;
+const DEFAULT_INTERVAL_UNIT = 'minute';
 const DEFAULT_DAILY_HOUR = 9;
 const DEFAULT_DAILY_MINUTE = 0;
+const DEFAULT_WEEKLY_WEEKDAY = 5;
+const DEFAULT_MONTHLY_DAY = 1;
 const SCHEDULE_OPTIONS = [
   {
     value: 'manual',
@@ -42,6 +46,13 @@ const SCHEDULE_OPTIONS = [
     description: '用户登录或加载后运行一次。',
   },
   {
+    value: 'timed',
+    title: '定时执行',
+    description: '固定间隔、每天、每周、每月都归到这里。',
+  },
+];
+const TIMED_RULE_OPTIONS = [
+  {
     value: 'interval',
     title: '固定间隔执行',
     description: '按固定分钟数重复执行。',
@@ -51,6 +62,36 @@ const SCHEDULE_OPTIONS = [
     title: '每天固定时间',
     description: '每天在指定时刻运行。',
   },
+  {
+    value: 'weekly',
+    title: '每周固定时间',
+    description: '适合每周例行任务，例如每周五 17:50。',
+  },
+  {
+    value: 'monthly',
+    title: '每月固定日期',
+    description: '适合月结、账单、报表这类固定日期任务。',
+  },
+];
+const CALENDAR_RULE_OPTIONS = [
+  { value: 'daily', label: '每天' },
+  { value: 'weekly', label: '每周' },
+  { value: 'monthly', label: '每月' },
+];
+const INTERVAL_UNIT_OPTIONS = [
+  { value: 'second', label: '秒' },
+  { value: 'minute', label: '分钟' },
+  { value: 'hour', label: '小时' },
+  { value: 'day', label: '天' },
+];
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: '周日' },
+  { value: 1, label: '周一' },
+  { value: 2, label: '周二' },
+  { value: 3, label: '周三' },
+  { value: 4, label: '周四' },
+  { value: 5, label: '周五' },
+  { value: 6, label: '周六' },
 ];
 const RESTART_OPTIONS = [
   {
@@ -64,21 +105,6 @@ const RESTART_OPTIONS = [
     description: '适合需要持续驻留的守护服务。',
   },
 ];
-const PROFESSIONAL_FIELD_HELP = {
-  label: 'launchd 用它唯一识别任务。修改后会影响加载、重载和历史定位，建议长期保持稳定。',
-  fileName: '最终写入 ~/Library/LaunchAgents 的 plist 文件名。通常与 Label 保持可对应，方便排查。',
-  program: '明确指定要执行的二进制或解释器路径。留空时，launchd 会尝试从 ProgramArguments 第一项推断。',
-  programArgumentsText: '按顺序传给进程的参数列表。每行一个参数，适合脚本路径、选项和运行参数分开维护。',
-  workingDirectory: '进程启动时的当前目录。脚本依赖相对路径、读取本地配置或输出文件时通常要设置。',
-  runAtLoad: '任务被 bootstrap、登录会话启动或配置重新加载时，是否立即执行一次。',
-  keepAlive: '进程退出后是否自动拉起。守护服务适合开启，一次性脚本通常不要开启。',
-  startInterval: '固定间隔调度，单位是秒。设置后会按周期重复执行，适合轮询类任务。',
-  startCalendarIntervalJson: '日历调度规则，支持对象或对象数组。适合每天定时、每周定时等复杂计划。',
-  standardOutPath: '标准输出写入的日志文件。配置后可直接在日志抽屉里查看程序正常输出。',
-  standardErrorPath: '标准错误写入的日志文件。程序报错、异常堆栈通常会落到这里。',
-  environmentVariablesText: '启动进程前注入的环境变量。每行一个 KEY=value，适合放运行时配置。',
-  watchPathsText: '当这些路径发生变化时触发任务。适合文件监听、目录同步等被动触发场景。',
-};
 
 /**
  * 将多行文本转成数组。
@@ -135,16 +161,149 @@ function clampNumber(value, min, max) {
 }
 
 /**
- * 解析 StartCalendarInterval，提取可映射的每日定时。
+ * 返回格式化后的时间文本。
+ */
+function formatClock(hour, minute) {
+  return `${String(clampNumber(hour, 0, 23)).padStart(2, '0')}:${String(clampNumber(minute, 0, 59)).padStart(2, '0')}`;
+}
+
+/**
+ * 返回周几文案。
+ */
+function getWeekdayLabel(weekday) {
+  return WEEKDAY_OPTIONS.find((option) => option.value === clampNumber(weekday, 0, 6))?.label || '周五';
+}
+
+/**
+ * 构造可视化日历规则对象。
+ */
+function buildCalendarRule(kind, values = {}) {
+  const hour = clampNumber(values.calendarHour ?? DEFAULT_DAILY_HOUR, 0, 23);
+  const minute = clampNumber(values.calendarMinute ?? DEFAULT_DAILY_MINUTE, 0, 59);
+
+  switch (kind) {
+    case 'weekly':
+      return {
+        Weekday: clampNumber(values.calendarWeekday ?? DEFAULT_WEEKLY_WEEKDAY, 0, 6),
+        Hour: hour,
+        Minute: minute,
+      };
+    case 'monthly':
+      return {
+        Day: clampNumber(values.calendarMonthDay ?? DEFAULT_MONTHLY_DAY, 1, 31),
+        Hour: hour,
+        Minute: minute,
+      };
+    case 'daily':
+      return {
+        Hour: hour,
+        Minute: minute,
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * 将可视化规则转成 JSON 文本。
+ */
+function buildCalendarRuleJSON(kind, values = {}) {
+  const rule = buildCalendarRule(kind, values);
+
+  // 未启用可视化规则时直接返回空串，避免误写入调度字段。
+  if (!rule) {
+    return '';
+  }
+
+  return JSON.stringify(rule, null, 2);
+}
+
+/**
+ * 生成日历规则摘要。
+ */
+function buildCalendarPlanSummary(plan) {
+  if (!plan?.hasValue || !plan.supported) {
+    return '';
+  }
+
+  const clockText = formatClock(plan.hour, plan.minute);
+
+  switch (plan.kind) {
+    case 'weekly':
+      return `每${getWeekdayLabel(plan.weekday)} ${clockText}`;
+    case 'monthly':
+      return `每月 ${clampNumber(plan.monthDay, 1, 31)} 日 ${clockText}`;
+    case 'daily':
+      return `每天 ${clockText}`;
+    default:
+      return '';
+  }
+}
+
+/**
+ * 将秒数拆成更适合展示的间隔单位。
+ */
+function splitInterval(seconds) {
+  const normalizedSeconds = Math.max(1, Number(seconds || 0));
+
+  // 优先使用能整除的更大单位，减少用户手动换算。
+  if (normalizedSeconds % 86400 === 0) {
+    return { value: normalizedSeconds / 86400, unit: 'day' };
+  }
+  if (normalizedSeconds % 3600 === 0) {
+    return { value: normalizedSeconds / 3600, unit: 'hour' };
+  }
+  if (normalizedSeconds % 60 === 0) {
+    return { value: normalizedSeconds / 60, unit: 'minute' };
+  }
+
+  return { value: normalizedSeconds, unit: 'second' };
+}
+
+/**
+ * 将间隔值和单位转成秒。
+ */
+function intervalToSeconds(value, unit) {
+  const normalizedValue = clampNumber(value, 1, 999999);
+
+  switch (unit) {
+    case 'day':
+      return normalizedValue * 86400;
+    case 'hour':
+      return normalizedValue * 3600;
+    case 'second':
+      return normalizedValue;
+    case 'minute':
+    default:
+      return normalizedValue * 60;
+  }
+}
+
+/**
+ * 将秒数格式化成更自然的间隔文案。
+ */
+function formatIntervalSummary(seconds) {
+  const interval = splitInterval(seconds);
+  const unitLabel = INTERVAL_UNIT_OPTIONS.find((option) => option.value === interval.unit)?.label || '分钟';
+
+  return `每 ${interval.value} ${unitLabel}`;
+}
+
+/**
+ * 解析 StartCalendarInterval，提取可映射的常见定时。
  */
 function parseCalendarPlan(calendarJSON) {
   const content = String(calendarJSON || '').trim();
 
   if (!content) {
     return {
-      supported: false,
+      hasValue: false,
+      supported: true,
+      kind: 'daily',
       hour: DEFAULT_DAILY_HOUR,
       minute: DEFAULT_DAILY_MINUTE,
+      weekday: DEFAULT_WEEKLY_WEEKDAY,
+      monthDay: DEFAULT_MONTHLY_DAY,
       warning: '',
     };
   }
@@ -156,49 +315,112 @@ function parseCalendarPlan(calendarJSON) {
     // 数组或复杂对象只在最简单的“每日固定时刻”下做映射。
     if (Array.isArray(parsed) && parsed.length !== 1) {
       return {
+        hasValue: true,
         supported: false,
+        kind: 'daily',
         hour: DEFAULT_DAILY_HOUR,
         minute: DEFAULT_DAILY_MINUTE,
-        warning: '当前任务使用了多段定时，麻瓜模式会改写为单次每日执行。',
+        weekday: DEFAULT_WEEKLY_WEEKDAY,
+        monthDay: DEFAULT_MONTHLY_DAY,
+        warning: '当前任务使用了多段定时，表单模式无法完整维护，请改用原始 plist。',
       };
     }
 
     if (!candidate || typeof candidate !== 'object') {
       return {
+        hasValue: true,
         supported: false,
+        kind: 'daily',
         hour: DEFAULT_DAILY_HOUR,
         minute: DEFAULT_DAILY_MINUTE,
-        warning: '当前任务的定时结构较特殊，建议用专业表单或原始 plist 维护。',
+        weekday: DEFAULT_WEEKLY_WEEKDAY,
+        monthDay: DEFAULT_MONTHLY_DAY,
+        warning: '当前任务的定时结构较特殊，建议改用原始 plist 维护。',
       };
     }
 
     const keys = Object.keys(candidate);
     const hour = Number(candidate.Hour);
     const minute = Number(candidate.Minute);
-    const unsupportedKeys = keys.filter((key) => !['Hour', 'Minute'].includes(key));
+    const weekday = Number(candidate.Weekday);
+    const monthDay = Number(candidate.Day);
+    const isDaily = ['Hour', 'Minute'].every((key) => keys.includes(key)) && keys.length === 2;
+    const isWeekly = ['Weekday', 'Hour', 'Minute'].every((key) => keys.includes(key)) && keys.length === 3;
+    const isMonthly = ['Day', 'Hour', 'Minute'].every((key) => keys.includes(key)) && keys.length === 3;
 
-    // 出现周、月、日等额外键时，不再尝试映射到简化模式。
-    if (!Number.isFinite(hour) || !Number.isFinite(minute) || unsupportedKeys.length > 0) {
+    // 只映射固定时刻的日、周、月三类规则，其余复杂组合继续交给 JSON 编辑。
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
       return {
+        hasValue: true,
         supported: false,
+        kind: 'daily',
         hour: DEFAULT_DAILY_HOUR,
         minute: DEFAULT_DAILY_MINUTE,
-        warning: '当前任务使用了高级日历规则，麻瓜模式无法完整表达。',
+        weekday: DEFAULT_WEEKLY_WEEKDAY,
+        monthDay: DEFAULT_MONTHLY_DAY,
+        warning: '当前任务使用了高级日历规则，基础表单无法完整表达。',
+      };
+    }
+
+    if (isDaily) {
+      return {
+        hasValue: true,
+        supported: true,
+        kind: 'daily',
+        hour: clampNumber(hour, 0, 23),
+        minute: clampNumber(minute, 0, 59),
+        weekday: DEFAULT_WEEKLY_WEEKDAY,
+        monthDay: DEFAULT_MONTHLY_DAY,
+        warning: '',
+      };
+    }
+
+    if (isWeekly && Number.isFinite(weekday)) {
+      return {
+        hasValue: true,
+        supported: true,
+        kind: 'weekly',
+        hour: clampNumber(hour, 0, 23),
+        minute: clampNumber(minute, 0, 59),
+        weekday: clampNumber(weekday, 0, 6),
+        monthDay: DEFAULT_MONTHLY_DAY,
+        warning: '',
+      };
+    }
+
+    if (isMonthly && Number.isFinite(monthDay)) {
+      return {
+        hasValue: true,
+        supported: true,
+        kind: 'monthly',
+        hour: clampNumber(hour, 0, 23),
+        minute: clampNumber(minute, 0, 59),
+        weekday: DEFAULT_WEEKLY_WEEKDAY,
+        monthDay: clampNumber(monthDay, 1, 31),
+        warning: '',
       };
     }
 
     return {
-      supported: true,
-      hour: clampNumber(hour, 0, 23),
-      minute: clampNumber(minute, 0, 59),
-      warning: '',
+      hasValue: true,
+      supported: false,
+      kind: 'daily',
+      hour: DEFAULT_DAILY_HOUR,
+      minute: DEFAULT_DAILY_MINUTE,
+      weekday: DEFAULT_WEEKLY_WEEKDAY,
+      monthDay: DEFAULT_MONTHLY_DAY,
+      warning: '当前任务使用了高级日历规则，基础表单无法完整表达。',
     };
   } catch {
     return {
+      hasValue: true,
       supported: false,
+      kind: 'daily',
       hour: DEFAULT_DAILY_HOUR,
       minute: DEFAULT_DAILY_MINUTE,
-      warning: '当前任务的日历配置不是合法 JSON，建议先用专业表单修正。',
+      weekday: DEFAULT_WEEKLY_WEEKDAY,
+      monthDay: DEFAULT_MONTHLY_DAY,
+        warning: '当前任务的日历配置不是合法 JSON，建议改用原始 plist 修正。',
     };
   }
 }
@@ -376,13 +598,17 @@ function buildGeneratedIdentity(values = {}) {
 function buildFormValues(editor) {
   const form = editor?.form || {};
   const calendarPlan = parseCalendarPlan(form.startCalendarIntervalJson);
+  const intervalPlan = splitInterval(Number(form.startInterval || 0) || DEFAULT_INTERVAL_MINUTES * 60);
   let scheduleType = 'manual';
+  let timedRuleType = 'interval';
 
-  // 先用更明确的日历和轮询规则判断，再回退到登录执行。
-  if (calendarPlan.supported) {
-    scheduleType = 'daily';
+  // 先判断是否存在定时规则，再回退到登录执行。
+  if (calendarPlan.hasValue) {
+    scheduleType = 'timed';
+    timedRuleType = calendarPlan.supported ? calendarPlan.kind : 'daily';
   } else if (Number(form.startInterval || 0) > 0) {
-    scheduleType = 'interval';
+    scheduleType = 'timed';
+    timedRuleType = 'interval';
   } else if (form.runAtLoad) {
     scheduleType = 'login';
   }
@@ -394,22 +620,25 @@ function buildFormValues(editor) {
     watchPathsText: (form.watchPaths || []).join('\n'),
     environmentVariablesText: envMapToText(form.environmentVariables),
     scheduleType,
-    intervalMinutes: Number(form.startInterval || 0) > 0
-      ? Math.max(1, Math.round(Number(form.startInterval || 0) / 60))
-      : DEFAULT_INTERVAL_MINUTES,
-    dailyHour: calendarPlan.hour,
-    dailyMinute: calendarPlan.minute,
+    timedRuleType,
+    intervalValue: intervalPlan.value,
+    intervalUnit: intervalPlan.unit || DEFAULT_INTERVAL_UNIT,
+    calendarHour: calendarPlan.hour,
+    calendarMinute: calendarPlan.minute,
+    calendarWeekday: calendarPlan.weekday,
+    calendarMonthDay: calendarPlan.monthDay,
     guideRunAtLoad: scheduleType === 'login' ? true : Boolean(form.runAtLoad),
     restartPolicy: form.keepAlive ? 'always' : 'none',
   };
 }
 
 /**
- * 将麻瓜模式字段回写为真正的 launchd 表单字段。
+ * 将基础表单字段回写为真正的 launchd 表单字段。
  */
 function normalizeGuideValues(values) {
   const identity = buildGeneratedIdentity(values);
   const scheduleType = String(values.scheduleType || 'manual');
+  const timedRuleType = String(values.timedRuleType || 'interval');
   let runAtLoad = false;
   let startInterval = 0;
   let startCalendarIntervalJson = '';
@@ -418,20 +647,15 @@ function normalizeGuideValues(values) {
     case 'login':
       runAtLoad = true;
       break;
-    case 'interval':
+    case 'timed':
       runAtLoad = Boolean(values.guideRunAtLoad);
-      startInterval = clampNumber(values.intervalMinutes || DEFAULT_INTERVAL_MINUTES, 1, 1440) * 60;
-      break;
-    case 'daily':
-      runAtLoad = Boolean(values.guideRunAtLoad);
-      startCalendarIntervalJson = JSON.stringify(
-        {
-          Hour: clampNumber(values.dailyHour, 0, 23),
-          Minute: clampNumber(values.dailyMinute, 0, 59),
-        },
-        null,
-        2,
-      );
+
+      // 间隔执行与日历执行共用“定时执行”入口，再按子类型决定实际字段。
+      if (timedRuleType === 'interval') {
+        startInterval = intervalToSeconds(values.intervalValue || DEFAULT_INTERVAL_MINUTES, values.intervalUnit || DEFAULT_INTERVAL_UNIT);
+      } else {
+        startCalendarIntervalJson = buildCalendarRuleJSON(timedRuleType, values);
+      }
       break;
     default:
       runAtLoad = false;
@@ -450,13 +674,10 @@ function normalizeGuideValues(values) {
 }
 
 /**
- * 根据当前模式构造保存补丁。
+ * 根据当前表单构造保存补丁。
  */
-function buildFormPatch(values, panelMode) {
-  const normalizedValues = panelMode === '麻瓜模式' ? normalizeGuideValues(values) : {
-    ...values,
-    ...buildGeneratedIdentity(values),
-  };
+function buildFormPatch(values) {
+  const normalizedValues = normalizeGuideValues(values);
 
   return {
     label: normalizedValues.label || '',
@@ -478,16 +699,22 @@ function buildFormPatch(values, panelMode) {
 /**
  * 生成简洁的调度摘要。
  */
-function buildScheduleSummary(values, panelMode) {
-  const normalizedValues = panelMode === '麻瓜模式' ? normalizeGuideValues(values) : values;
+function buildScheduleSummary(values) {
+  const normalizedValues = buildFormPatch(values);
   const calendarPlan = parseCalendarPlan(normalizedValues.startCalendarIntervalJson);
+  const calendarSummary = buildCalendarPlanSummary(calendarPlan);
 
-  if (calendarPlan.supported) {
-    return `每天 ${String(calendarPlan.hour).padStart(2, '0')}:${String(calendarPlan.minute).padStart(2, '0')}`;
+  if (calendarSummary) {
+    return calendarSummary;
+  }
+
+  // 可视化表单无法完整表达的规则，至少要明确告诉用户仍存在复杂调度。
+  if (calendarPlan.hasValue) {
+    return '复杂日历规则';
   }
 
   if (Number(normalizedValues.startInterval || 0) > 0) {
-    return `每 ${Math.round(Number(normalizedValues.startInterval || 0) / 60)} 分钟`;
+    return formatIntervalSummary(normalizedValues.startInterval);
   }
 
   if (normalizedValues.runAtLoad) {
@@ -498,45 +725,24 @@ function buildScheduleSummary(values, panelMode) {
 }
 
 /**
- * 汇总麻瓜模式的兼容性提示。
+ * 汇总表单模式的兼容性提示。
  */
-function buildGuideWarnings(editor) {
+function buildFormWarnings(values = {}) {
   const warnings = [];
-  const form = editor?.form;
+  const calendarPlan = parseCalendarPlan(values.startCalendarIntervalJson);
 
-  if (!form) {
-    return warnings;
+  if (Number(values.startInterval || 0) > 0 && calendarPlan.hasValue) {
+    warnings.push('当前任务同时使用固定间隔和日历规则，表单模式无法完整维护，请改用原始 plist。');
   }
-
-  const calendarPlan = parseCalendarPlan(form.startCalendarIntervalJson);
   if (calendarPlan.warning) {
     warnings.push(calendarPlan.warning);
-  }
-
-  // 秒级轮询在麻瓜模式会折算成分钟。
-  if (Number(form.startInterval || 0) > 0 && Number(form.startInterval || 0) % 60 !== 0) {
-    warnings.push('当前任务使用秒级轮询，麻瓜模式会按分钟显示和保存。');
   }
 
   return warnings;
 }
 
 /**
- * 渲染带帮助提示的字段标题。
- */
-function renderFieldLabel(title, description) {
-  return (
-    <span className="field-help-label">
-      <span>{title}</span>
-      <Tooltip title={description}>
-        <QuestionCircleOutlined className="field-help-trigger" />
-      </Tooltip>
-    </span>
-  );
-}
-
-/**
- * 渲染麻瓜模式的分段选择器。
+ * 渲染基础表单的分段选择器。
  */
 function GuideChoiceGroup({ name, options }) {
   const selectedValue = Form.useWatch(name);
@@ -562,6 +768,67 @@ function GuideChoiceGroup({ name, options }) {
 }
 
 /**
+ * 渲染日历规则表单字段。
+ */
+function CalendarRuleFields({
+  typeFieldName = 'calendarRuleType',
+  hourFieldName = 'calendarHour',
+  minuteFieldName = 'calendarMinute',
+  weekdayFieldName = 'calendarWeekday',
+  monthDayFieldName = 'calendarMonthDay',
+  forcedRuleType = '',
+  showRuleType = true,
+}) {
+  const watchedRuleType = String(Form.useWatch(typeFieldName) || 'daily');
+  const ruleType = String(forcedRuleType || watchedRuleType || 'daily');
+
+  return (
+    <Row gutter={[16, 0]}>
+      {showRuleType ? (
+        <Col xs={24}>
+          <Form.Item label="规则类型" name={typeFieldName}>
+            <Segmented
+              block
+              options={CALENDAR_RULE_OPTIONS.map((option) => ({
+                label: option.label,
+                value: option.value,
+              }))}
+            />
+          </Form.Item>
+        </Col>
+      ) : null}
+
+      {ruleType === 'weekly' ? (
+        <Col xs={24} md={10}>
+          <Form.Item label="周几" name={weekdayFieldName}>
+            <Select options={WEEKDAY_OPTIONS} />
+          </Form.Item>
+        </Col>
+      ) : null}
+
+      {ruleType === 'monthly' ? (
+        <Col xs={24} md={10}>
+          <Form.Item label="日期" name={monthDayFieldName} extra="按自然月日期执行，例如每月 1 日。">
+            <InputNumber min={1} max={31} className="full-width" />
+          </Form.Item>
+        </Col>
+      ) : null}
+
+      <Col xs={12} md={ruleType === 'daily' ? 12 : 7}>
+        <Form.Item label="小时" name={hourFieldName}>
+          <InputNumber min={0} max={23} className="full-width" />
+        </Form.Item>
+      </Col>
+      <Col xs={12} md={ruleType === 'daily' ? 12 : 7}>
+        <Form.Item label="分钟" name={minuteFieldName}>
+          <InputNumber min={0} max={59} className="full-width" />
+        </Form.Item>
+      </Col>
+    </Row>
+  );
+}
+
+/**
  * 渲染配置抽屉中的编辑内容。
  */
 function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
@@ -570,7 +837,8 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
   const autoManagedRef = useRef({ label: true, fileName: true, stdout: true, stderr: true });
   const autoIdentityRef = useRef({ label: '', fileName: '' });
   const autoLogPathsRef = useRef({ stdout: '', stderr: '' });
-  const [panelMode, setPanelMode] = useState(taskId ? '专业表单' : '麻瓜模式');
+  const [panelMode, setPanelMode] = useState(FORM_MODE);
+  const [expandedSections, setExpandedSections] = useState([]);
   const [rawXML, setRawXML] = useState('');
   const [validation, setValidation] = useState([]);
   const [submitting, setSubmitting] = useState('');
@@ -582,7 +850,8 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
     autoManagedRef.current = { label: true, fileName: true, stdout: true, stderr: true };
     autoIdentityRef.current = { label: '', fileName: '' };
     autoLogPathsRef.current = { stdout: '', stderr: '' };
-    setPanelMode(taskId ? '专业表单' : '麻瓜模式');
+    setPanelMode(FORM_MODE);
+    setExpandedSections([]);
 
     /**
      * 拉取编辑器数据。
@@ -627,10 +896,10 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
   }, [form, taskId]);
 
   /**
-   * 在麻瓜模式下自动维护名称、标识、文件名与日志路径。
+   * 在表单模式下自动维护名称、标识、文件名与日志路径。
    */
-  function handleGuideValuesChange(changedValues) {
-    if (taskId || !editor || panelMode !== '麻瓜模式') {
+  function handleFormValuesChange(changedValues) {
+    if (taskId || !editor || panelMode !== FORM_MODE) {
       return;
     }
 
@@ -721,7 +990,7 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
     let values = form.getFieldsValue(true);
 
     // 切模式只做同步，不强制阻塞用户；保存和校验仍然执行完整校验。
-    if (validateForm && panelMode !== '原始 plist') {
+    if (validateForm && panelMode !== RAW_MODE) {
       await form.validateFields();
       values = form.getFieldsValue(true);
     }
@@ -729,10 +998,10 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
     return {
       id: editor?.serviceId || '',
       scope: editor?.scopeKey || 'user-agent',
-      fileName: buildFormPatch(values, panelMode).fileName || editor?.fileName || '',
+      fileName: buildFormPatch(values).fileName || editor?.fileName || '',
       rawXML,
-      formPatch: buildFormPatch(values, panelMode),
-      mode: panelMode === '原始 plist' ? 'raw' : 'form',
+      formPatch: buildFormPatch(values),
+      mode: panelMode === RAW_MODE ? 'raw' : 'form',
     };
   }
 
@@ -748,7 +1017,7 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
   }
 
   /**
-   * 切换编辑模式前先同步当前草稿，确保三种模式数据实时流通。
+   * 切换编辑模式前先同步当前草稿，确保表单和 plist 数据实时流通。
    */
   async function handleModeChange(nextMode) {
     if (nextMode === panelMode || switchingMode) {
@@ -870,27 +1139,35 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
   }, [validation]);
 
   const currentValues = formValues || buildFormValues(editor);
-  const previewPatch = useMemo(() => buildFormPatch(currentValues || {}, panelMode), [currentValues, panelMode]);
-  const guideWarnings = useMemo(() => buildGuideWarnings(editor), [editor]);
+  const previewPatch = useMemo(() => buildFormPatch(currentValues || {}), [currentValues]);
+  const formWarnings = useMemo(() => buildFormWarnings(currentValues || {}), [currentValues]);
   const scheduleType = String(currentValues?.scheduleType || 'manual');
+  const timedRuleType = String(currentValues?.timedRuleType || 'interval');
   const summaryItems = useMemo(() => {
     return [
       { label: '内部标识', value: previewPatch.label || '保存时自动生成' },
       { label: '配置文件', value: previewPatch.fileName || '保存时自动生成' },
       { label: '执行程序', value: previewPatch.program || '未设置' },
-      { label: '运行方式', value: buildScheduleSummary(currentValues || {}, panelMode) },
+      { label: '运行方式', value: buildScheduleSummary(currentValues || {}) },
       { label: '异常处理', value: previewPatch.keepAlive ? '异常退出后自动拉起' : '执行完后结束' },
       { label: '工作目录', value: previewPatch.workingDirectory || '跟随系统默认目录' },
     ];
-  }, [currentValues, panelMode, previewPatch]);
+  }, [currentValues, previewPatch]);
 
   /**
-   * 渲染麻瓜模式主表单。
+   * 维护折叠面板展开状态，避免表单重渲染时丢失。
    */
-  function renderGuideForm() {
+  function handleCollapseChange(nextKeys) {
+    setExpandedSections(Array.isArray(nextKeys) ? nextKeys : [nextKeys]);
+  }
+
+  /**
+   * 渲染表单模式主表单。
+   */
+  function renderFormContent() {
     return (
       <Space direction="vertical" size={16} className="full-width">
-        {guideWarnings.map((warning) => (
+        {formWarnings.map((warning) => (
           <Alert key={warning} type="warning" showIcon message={warning} />
         ))}
 
@@ -942,44 +1219,38 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
           <div className="config-section-heading">
             <Text className="config-section-eyebrow">运行规则</Text>
             <Title level={5}>它应该在什么时候运行</Title>
-            <Paragraph type="secondary">选最接近你需求的方式即可，系统会自动映射成 launchd 配置。</Paragraph>
+            <Paragraph type="secondary">先决定是不是定时执行；如果是，再补充具体的间隔或时间规则。</Paragraph>
           </div>
           <div className="guide-schedule-stack">
             <GuideChoiceGroup name="scheduleType" options={SCHEDULE_OPTIONS} />
 
-            {scheduleType === 'interval' ? (
-              <Row gutter={[16, 0]} className="guide-schedule-fields">
-                <Col xs={24} md={12}>
-                  <Form.Item label="执行间隔（分钟）" name="intervalMinutes">
-                    <InputNumber min={1} max={1440} className="full-width" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item label="加载后立即执行一次" name="guideRunAtLoad" valuePropName="checked">
-                    <Switch />
-                  </Form.Item>
-                </Col>
-              </Row>
-            ) : null}
+            {scheduleType === 'timed' ? (
+              <div className="guide-schedule-fields">
+                <GuideChoiceGroup name="timedRuleType" options={TIMED_RULE_OPTIONS} />
 
-            {scheduleType === 'daily' ? (
-              <Row gutter={[16, 0]} className="guide-schedule-fields">
-                <Col xs={12} md={6}>
-                  <Form.Item label="小时" name="dailyHour">
-                    <InputNumber min={0} max={23} className="full-width" />
-                  </Form.Item>
-                </Col>
-                <Col xs={12} md={6}>
-                  <Form.Item label="分钟" name="dailyMinute">
-                    <InputNumber min={0} max={59} className="full-width" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item label="加载后立即执行一次" name="guideRunAtLoad" valuePropName="checked">
-                    <Switch />
-                  </Form.Item>
-                </Col>
-              </Row>
+                {timedRuleType === 'interval' ? (
+                  <Row gutter={[16, 0]}>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="执行间隔" extra="支持秒、分钟、小时、天。">
+                        <Space.Compact block>
+                          <Form.Item name="intervalValue" noStyle>
+                            <InputNumber min={1} max={999999} className="full-width" />
+                          </Form.Item>
+                          <Form.Item name="intervalUnit" noStyle>
+                            <Select options={INTERVAL_UNIT_OPTIONS} style={{ width: 110 }} />
+                          </Form.Item>
+                        </Space.Compact>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                ) : (
+                  <CalendarRuleFields showRuleType={false} forcedRuleType={timedRuleType} />
+                )}
+
+                <Form.Item label="加载后立即执行一次" name="guideRunAtLoad" valuePropName="checked">
+                  <Switch />
+                </Form.Item>
+              </div>
             ) : null}
 
             {scheduleType === 'manual' ? (
@@ -1004,51 +1275,55 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
 
         <Collapse
           className="config-collapse"
+          activeKey={expandedSections}
+          onChange={handleCollapseChange}
           items={[
             {
               key: 'advanced',
-              label: '可选高级项',
+              label: '高级设置',
               children: (
-                <Row gutter={[16, 0]}>
-                  <Col xs={24}>
-                    {renderLogPathField({
-                      label: '输出日志路径',
-                      name: 'standardOutPath',
-                      stream: 'stdout',
-                      extra: '填写后，便于在日志抽屉直接查看执行输出。',
-                      placeholder: '/Users/me/Library/Logs/task.out.log',
-                    })}
-                  </Col>
-                  <Col xs={24}>
-                    {renderLogPathField({
-                      label: '错误日志路径',
-                      name: 'standardErrorPath',
-                      stream: 'stderr',
-                      extra: '没有单独错误日志时，也可以和输出日志写成同一路径。',
-                      placeholder: '/Users/me/Library/Logs/task.err.log',
-                    })}
-                  </Col>
-                  <Col xs={24}>
-                    <Form.Item label="环境变量" name="environmentVariablesText" extra="每行一个 KEY=value。">
-                      <TextArea autoSize={{ minRows: 4, maxRows: 6 }} placeholder="KEY=value" />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24}>
-                    <Form.Item label="监听路径" name="watchPathsText" extra="每行一个路径，文件变化时会触发任务。">
-                      <TextArea autoSize={{ minRows: 3, maxRows: 6 }} placeholder="每行一个路径" />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} md={12}>
-                    <Form.Item label="内部 Label" name="label" extra="留空时自动生成，例如 com.launchd-panel.daily-backup。">
-                      <Input placeholder="com.example.demo" />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} md={12}>
-                    <Form.Item label="plist 文件名" name="fileName" extra="留空时自动生成，例如 daily-backup.plist。">
-                      <Input placeholder="daily-backup.plist" />
-                    </Form.Item>
-                  </Col>
-                </Row>
+                <Space direction="vertical" size={16} className="full-width">
+                  <Row gutter={[16, 0]}>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="内部 Label" name="label" extra="留空时自动生成，例如 com.launchd-panel.daily-backup。">
+                        <Input placeholder="com.example.demo" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Form.Item label="plist 文件名" name="fileName" extra="留空时自动生成，例如 daily-backup.plist。">
+                        <Input placeholder="daily-backup.plist" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24}>
+                      {renderLogPathField({
+                        label: '输出日志路径',
+                        name: 'standardOutPath',
+                        stream: 'stdout',
+                        extra: '填写后，便于在日志抽屉直接查看执行输出。',
+                        placeholder: '/Users/me/Library/Logs/task.out.log',
+                      })}
+                    </Col>
+                    <Col xs={24}>
+                      {renderLogPathField({
+                        label: '错误日志路径',
+                        name: 'standardErrorPath',
+                        stream: 'stderr',
+                        extra: '没有单独错误日志时，也可以和输出日志写成同一路径。',
+                        placeholder: '/Users/me/Library/Logs/task.err.log',
+                      })}
+                    </Col>
+                    <Col xs={24}>
+                      <Form.Item label="环境变量" name="environmentVariablesText" extra="每行一个 KEY=value。">
+                        <TextArea autoSize={{ minRows: 4, maxRows: 6 }} placeholder="KEY=value" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24}>
+                      <Form.Item label="监听路径" name="watchPathsText" extra="每行一个路径，文件变化时会触发任务。">
+                        <TextArea autoSize={{ minRows: 3, maxRows: 6 }} placeholder="每行一个路径" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </Space>
               ),
             },
           ]}
@@ -1058,176 +1333,16 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
   }
 
   /**
-   * 渲染专业表单。
-   */
-  function renderProfessionalForm() {
-    return (
-      <Space direction="vertical" size={16} className="full-width">
-        <Row gutter={[16, 16]}>
-          <Col xs={24} xl={12}>
-            <Card size="small" className="inner-card config-section-card">
-              <div className="config-section-heading">
-                <Text className="config-section-eyebrow">基础字段</Text>
-                <Title level={5}>任务标识</Title>
-                <Paragraph type="secondary">`Label` 和 plist 文件名决定 launchd 中的唯一身份，建议保持稳定。</Paragraph>
-              </div>
-              <Row gutter={[16, 0]}>
-                <Col xs={24}>
-                  <Form.Item
-                    label={renderFieldLabel('Label', PROFESSIONAL_FIELD_HELP.label)}
-                    name="label"
-                    rules={[{ required: true, message: '请输入 Label' }]}
-                    extra="建议使用反向域名，例如 com.example.daily-backup。"
-                  >
-                    <Input placeholder="com.example.demo" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24}>
-                  <Form.Item
-                    label={renderFieldLabel('文件名', PROFESSIONAL_FIELD_HELP.fileName)}
-                    name="fileName"
-                    rules={[{ required: true, message: '请输入文件名' }]}
-                    extra="保存到当前用户 LaunchAgents 目录时会自动清洗非法字符。"
-                  >
-                    <Input placeholder="com.example.demo.plist" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Card>
-          </Col>
-
-          <Col xs={24} xl={12}>
-            <Card size="small" className="inner-card config-section-card">
-              <div className="config-section-heading">
-                <Text className="config-section-eyebrow">命令配置</Text>
-                <Title level={5}>程序与参数</Title>
-                <Paragraph type="secondary">`Program` 适合单独指定可执行文件，参数按行维护更方便 diff 和排查。</Paragraph>
-              </div>
-              <Row gutter={[16, 0]}>
-                <Col xs={24}>
-                  <Form.Item
-                    label={renderFieldLabel('Program', PROFESSIONAL_FIELD_HELP.program)}
-                    name="program"
-                    extra="可留空，仅使用 ProgramArguments 的第一项作为执行程序。"
-                  >
-                    <Input placeholder="/usr/local/bin/task" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24}>
-                  <Form.Item
-                    label={renderFieldLabel('ProgramArguments', PROFESSIONAL_FIELD_HELP.programArgumentsText)}
-                    name="programArgumentsText"
-                    extra="每行一个参数。"
-                  >
-                    <TextArea autoSize={{ minRows: 4, maxRows: 8 }} placeholder="每行一个参数" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24}>
-                  <Form.Item label={renderFieldLabel('WorkingDirectory', PROFESSIONAL_FIELD_HELP.workingDirectory)} name="workingDirectory">
-                    <Input placeholder="/Users/me/workspace" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Card>
-          </Col>
-
-          <Col xs={24} xl={12}>
-            <Card size="small" className="inner-card config-section-card">
-              <div className="config-section-heading">
-                <Text className="config-section-eyebrow">调度配置</Text>
-                <Title level={5}>执行时机</Title>
-                <Paragraph type="secondary">这里保留原生 launchd 语义，`StartInterval` 单位为秒。</Paragraph>
-              </div>
-              <Row gutter={[16, 0]}>
-                <Col xs={24} md={12}>
-                  <Form.Item label={renderFieldLabel('RunAtLoad', PROFESSIONAL_FIELD_HELP.runAtLoad)} name="runAtLoad" valuePropName="checked">
-                    <Switch />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item label={renderFieldLabel('KeepAlive', PROFESSIONAL_FIELD_HELP.keepAlive)} name="keepAlive" valuePropName="checked">
-                    <Switch />
-                  </Form.Item>
-                </Col>
-                <Col xs={24}>
-                  <Form.Item label={renderFieldLabel('StartInterval', PROFESSIONAL_FIELD_HELP.startInterval)} name="startInterval">
-                    <InputNumber min={0} className="full-width" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24}>
-                  <Form.Item
-                    label={renderFieldLabel('StartCalendarInterval(JSON)', PROFESSIONAL_FIELD_HELP.startCalendarIntervalJson)}
-                    name="startCalendarIntervalJson"
-                    extra="支持对象或对象数组，适合复杂日历调度。"
-                  >
-                    <TextArea autoSize={{ minRows: 5, maxRows: 9 }} placeholder='{"Hour":2,"Minute":30}' />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Card>
-          </Col>
-
-          <Col xs={24} xl={12}>
-            <Card size="small" className="inner-card config-section-card">
-              <div className="config-section-heading">
-                <Text className="config-section-eyebrow">输出与环境</Text>
-                <Title level={5}>日志、环境变量、监听路径</Title>
-                <Paragraph type="secondary">日志路径能直接影响日志抽屉可读性，建议尽量配置。</Paragraph>
-              </div>
-              <Row gutter={[16, 0]}>
-                <Col xs={24}>
-                  {renderLogPathField({
-                    label: renderFieldLabel('StandardOutPath', PROFESSIONAL_FIELD_HELP.standardOutPath),
-                    name: 'standardOutPath',
-                    stream: 'stdout',
-                    placeholder: '/Users/me/Library/Logs/task.out.log',
-                  })}
-                </Col>
-                <Col xs={24}>
-                  {renderLogPathField({
-                    label: renderFieldLabel('StandardErrorPath', PROFESSIONAL_FIELD_HELP.standardErrorPath),
-                    name: 'standardErrorPath',
-                    stream: 'stderr',
-                    placeholder: '/Users/me/Library/Logs/task.err.log',
-                  })}
-                </Col>
-                <Col xs={24}>
-                  <Form.Item
-                    label={renderFieldLabel('EnvironmentVariables', PROFESSIONAL_FIELD_HELP.environmentVariablesText)}
-                    name="environmentVariablesText"
-                    extra="每行一个 KEY=value。"
-                  >
-                    <TextArea autoSize={{ minRows: 4, maxRows: 8 }} placeholder="KEY=value" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24}>
-                  <Form.Item
-                    label={renderFieldLabel('WatchPaths', PROFESSIONAL_FIELD_HELP.watchPathsText)}
-                    name="watchPathsText"
-                    extra="每行一个路径。"
-                  >
-                    <TextArea autoSize={{ minRows: 4, maxRows: 8 }} placeholder="每行一个路径" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Card>
-          </Col>
-        </Row>
-      </Space>
-    );
-  }
-
-  /**
    * 渲染主编辑区域。
    */
   function renderMainContent() {
-    if (panelMode === '原始 plist') {
+    if (panelMode === RAW_MODE) {
       return (
         <Card size="small" className="inner-card config-section-card full-height-card">
           <div className="config-section-heading">
             <Text className="config-section-eyebrow">权威源</Text>
             <Title level={5}>原始 plist</Title>
-            <Paragraph type="secondary">使用 Monaco Editor 直接维护 XML，适合复杂 `KeepAlive`、`MachServices` 和自定义键。</Paragraph>
+            <Paragraph type="secondary">直接维护 XML 内容，适合复杂 `KeepAlive`、`MachServices` 和自定义键。</Paragraph>
           </div>
           <PlistEditor
             value={rawXML}
@@ -1240,8 +1355,8 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
     }
 
     return (
-      <Form layout="vertical" form={form} disabled={editor?.readOnly} onValuesChange={handleGuideValuesChange}>
-        {panelMode === '麻瓜模式' ? renderGuideForm() : renderProfessionalForm()}
+      <Form layout="vertical" form={form} disabled={editor?.readOnly} onValuesChange={handleFormValuesChange}>
+        {renderFormContent()}
       </Form>
     );
   }
@@ -1254,7 +1369,7 @@ function ConfigurationPanel({ taskId, resolvedThemeMode, onSaved }) {
             <Tag color="processing">{taskId ? '编辑现有任务' : '创建新任务'}</Tag>
             <Title level={4}>{taskId ? editor?.form?.label || '未命名任务' : '创建 / 编辑配置'}</Title>
             <Paragraph type="secondary">
-              麻瓜模式面向普通用户，专业表单保留完整字段，原始 plist 用于处理高级键和精细 diff。
+              默认只保留一套易用表单；低频字段收进高级设置，原始 plist 继续保留给复杂场景。
             </Paragraph>
           </div>
           <Segmented
