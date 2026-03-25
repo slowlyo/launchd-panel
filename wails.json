@@ -4,7 +4,7 @@
   "outputfilename": "Launchd Panel",
   "info": {
     "productName": "Launchd Panel",
-    "productVersion": "0.1.2"
+    "productVersion": "0.1.3"
   },
   "frontend:install": "pnpm install",
   "frontend:build": "pnpm run build",
